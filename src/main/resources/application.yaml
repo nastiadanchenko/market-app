@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: market-app
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/market
+    username: postgres
+    password: password
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    yandex.workshop.market: DEBUG
+
+server:
+  port: 8080
