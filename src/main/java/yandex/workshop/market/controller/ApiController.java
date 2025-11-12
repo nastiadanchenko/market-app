@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import yandex.workshop.market.dto.Action;
 import yandex.workshop.market.dto.ItemDto;
-import yandex.workshop.market.dto.ItemsPage;
+import yandex.workshop.market.dto.ItemsPageDto;
 import yandex.workshop.market.dto.OrderDto;
 import yandex.workshop.market.dto.Sorter;
 import yandex.workshop.market.service.ItemService;
@@ -32,13 +32,13 @@ public class ApiController {
                                @RequestParam(required = false, defaultValue = "5") Integer pageSize,
                                Model model) {
 
-        ItemsPage itemsPage = itemService.getItemsPage(search, sort, pageNumber, pageSize);
+        ItemsPageDto itemsPageDto = itemService.getItemsPage(search, sort, pageNumber, pageSize);
 
         // Добавляем атрибуты модели
-        model.addAttribute("items", itemsPage.itemsRows());
+        model.addAttribute("items", itemsPageDto.itemsRows());
         model.addAttribute("search", search);
         model.addAttribute("sort", sort);
-        model.addAttribute("paging", itemsPage.paging());
+        model.addAttribute("paging", itemsPageDto.paging());
 
         // Возвращаем шаблон
         return "items";

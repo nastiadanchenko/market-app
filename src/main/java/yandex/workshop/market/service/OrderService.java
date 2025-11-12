@@ -2,6 +2,7 @@ package yandex.workshop.market.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,6 @@ public class OrderService {
     public OrderDto findOrderById(Long orderId) {
 
         return OrderDtoMapper.INSTANCE.toDto(orderRepository.findById(orderId).orElseThrow(() ->
-            new IllegalArgumentException("Order with id " + orderId + " not found")));
+            new NoSuchElementException("Order with id " + orderId + " not found")));
     }
 }

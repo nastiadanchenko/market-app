@@ -18,8 +18,6 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     @Query(value = "update items set count = count - 1 WHERE id = :id AND count > 0")
     void reduceItemCount(Long id);
 
-
-    @Query("SELECT i FROM items i WHERE i.count > :i")
     List<Item> findByCountGreaterThan(int i);
 
     @Modifying

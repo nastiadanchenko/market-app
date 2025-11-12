@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import yandex.workshop.market.dto.Action;
 import yandex.workshop.market.dto.ItemDto;
-import yandex.workshop.market.dto.ItemsPage;
+import yandex.workshop.market.dto.ItemsPageDto;
 import yandex.workshop.market.dto.PagingDto;
 import yandex.workshop.market.dto.Sorter;
 import yandex.workshop.market.dto.mapperDto.ItemMapper;
@@ -32,7 +32,7 @@ public class ItemService {
 
     public ItemDto findItemById(Long itemId) {
         return ItemMapper.INSTANCE.toDto(itemRepository.findById(itemId).orElseThrow(() ->
-            new NoSuchElementException("Item with id " + itemId + " not found")));
+            new NoSuchElementException("Товар с id " + itemId + " не найден")));
     }
 
 
@@ -42,7 +42,6 @@ public class ItemService {
             case PLUS -> increaseItemQuantity(itemId);
             case MINUS -> decreaseItemQuantity(itemId);
             case DELETE -> resetItemQuantity(itemId);
-            default -> throw new IllegalArgumentException("Unknown action: " + action);
         }
 
     }
@@ -79,10 +78,10 @@ public class ItemService {
             .reduce(BigDecimal.ZERO, BigDecimal::add).longValue();
     }
 
-    public ItemsPage getItemsPage(String search,
-                                  Sorter sort,
-                                  Integer pageNumber,
-                                  Integer pageSize
+    public ItemsPageDto getItemsPage(String search,
+                                     Sorter sort,
+                                     Integer pageNumber,
+                                     Integer pageSize
     ) {
 
         List<Item> items = findAllItems();
@@ -129,6 +128,6 @@ public class ItemService {
             itemsRows.add(row);
         }
 
-        return new ItemsPage(itemsRows, pagingDto);
+        return new ItemsPageDto(itemsRows, pagingDto);
     }
 }
