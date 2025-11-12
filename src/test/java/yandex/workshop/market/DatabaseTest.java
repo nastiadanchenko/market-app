@@ -56,8 +56,8 @@ public class DatabaseTest {
 
         Order order2 = new Order();
         OrderItem orderItem3 = new OrderItem(null, items.get(1), order2, 3);
-        order1.setItems(List.of(orderItem3));
-        order1.setTotalSum(150L);
+        order2.setItems(List.of(orderItem3));
+        order2.setTotalSum(150L);
 
         orderRepository.saveAll(List.of(order1, order2));
     }
