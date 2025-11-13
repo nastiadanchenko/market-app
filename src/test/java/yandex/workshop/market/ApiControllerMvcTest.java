@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import yandex.workshop.market.controller.ApiController;
 import yandex.workshop.market.dto.Action;
 import yandex.workshop.market.dto.ItemDto;
 import yandex.workshop.market.dto.ItemsPageDto;
@@ -26,7 +27,7 @@ import yandex.workshop.market.dto.mapperDto.ItemMapper;
 import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.OrderService;
 
-@WebMvcTest
+@WebMvcTest(ApiController.class)
 public class ApiControllerMvcTest {
     @Autowired
     private MockMvc mockMvc;
