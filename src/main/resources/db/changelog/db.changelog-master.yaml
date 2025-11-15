@@ -1,0 +1,163 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1
+      author: you
+      changes:
+        - createSequence:
+            sequenceName: item_sequence
+            startValue: 1
+            incrementBy: 1
+      rollback:
+        - dropSequence:
+            sequenceName: item_sequence
+
+  - changeSet:
+      id: 2
+      author: you
+      changes:
+        - createTable:
+            tableName: items
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: description
+                  type: varchar(1000)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: img_path
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price
+                  type: numeric
+                  defaultValueNumeric: 0.00
+                  constraints:
+                    nullable: false
+              - column:
+                  name: count
+                  type: integer
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: item
+
+  - changeSet:
+      id: 3
+      author: you
+      changes:
+        - createSequence:
+            sequenceName: order_sequence
+            startValue: 1
+            incrementBy: 1
+      rollback:
+        - dropSequence:
+            sequenceName: order_sequence
+
+  - changeSet:
+      id: 4
+      author: you
+      changes:
+        - createTable:
+            tableName: orders
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: total_sum
+                  type: bigint
+      rollback:
+        - dropTable:
+            tableName: orders
+
+  - changeSet:
+      id: 5
+      author: you
+      changes:
+        - createSequence:
+            sequenceName: order_item_sequence
+            startValue: 1
+            incrementBy: 1
+      rollback:
+        - dropSequence:
+            sequenceName: order_item_sequence
+
+  - changeSet:
+      id: 6
+      author: you
+      changes:
+        - createTable:
+            tableName: orders_items
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: item_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: order_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: count
+                  type: integer
+      rollback:
+        - dropTable:
+            tableName: orders_items
+
+  - changeSet:
+      id: 7
+      author: you
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: orders_items
+            baseColumnNames: item_id
+            referencedTableName: items
+            referencedColumnNames: id
+            onDelete: CASCADE
+            constraintName: fk_orders_items_item
+        - addForeignKeyConstraint:
+            baseTableName: orders_items
+            baseColumnNames: order_id
+            referencedTableName: orders
+            referencedColumnNames: id
+            onDelete: CASCADE
+            constraintName: fk_orders_items_order
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: orders_items
+            constraintName: fk_orders_items_item
+        - dropForeignKeyConstraint:
+            baseTableName: orders_items
+            constraintName: fk_orders_items_order
+
+  - changeSet:
+      id: 8-initial-data
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/data/initial_data.sql
