@@ -1,26 +1,23 @@
 package yandex.workshop.market.repository;
 
-import java.util.List;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.r2dbc.repository.Query;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import yandex.workshop.market.entity.Item;
 
 @Repository
-public interface ItemRepository extends JpaRepository<Item, Long> {
+public interface ItemRepository extends ReactiveCrudRepository<Item, Long>{
 
-    @Modifying
-    @Query(value = "update items set count = count + 1 WHERE id = :id")
-    void increaseItemCount(Long id);
+    @Query(value = "update items set count = count + 1 WHERE id = :id returning *")
+    Mono<Item> increaseItemCount(Long id);
 
-    @Modifying
-    @Query(value = "update items set count = count - 1 WHERE id = :id AND count > 0")
-    void reduceItemCount(Long id);
+    @Query(value = "update items set count = count - 1 WHERE id = :id AND count > 0 returning *")
+    Mono<Item> reduceItemCount(Long id);
 
-    List<Item> findByCountGreaterThan(int i);
+    Flux<Item> findItemsByCountGreaterThan(int i);
 
-    @Modifying
-    @Query("update items set count = 0 WHERE id = :itemId")
-    void resetItemCount(Long itemId);
+    @Query("update items set count = 0 WHERE id = :itemId returning *")
+    Mono<Item> resetItemCount(Long itemId);
 }
