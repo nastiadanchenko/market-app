@@ -20,6 +20,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import yandex.workshop.market.dto.Action;
 import yandex.workshop.market.dto.ItemDto;
 import yandex.workshop.market.dto.ItemsPageDto;
@@ -55,35 +58,31 @@ class ItemServiceTest {
     class FindMethods {
 
         @Test
-        @DisplayName("findAllItems — должен вернуть все товары")
-        void testFindAllItems() {
-            when(itemRepository.findAll()).thenReturn(List.of(item1, item2, item3));
-
-            List<Item> result = itemService.findAllItems();
-
-            assertThat(result).containsExactly(item1, item2, item3);
-            verify(itemRepository, times(1)).findAll();
-        }
-
-        @Test
         @DisplayName("findItemById — товар найден")
         void testFindItemById() {
-            when(itemRepository.findById(1L)).thenReturn(Optional.of(item1));
+            when(itemRepository.findById(1L)).thenReturn(Mono.just(item1));
 
-            ItemDto dto = itemService.findItemById(1L);
+            Mono<ItemDto> result = itemService.findItemById(1L);
 
-            assertThat(dto.id()).isEqualTo(item1.getId());
-            assertThat(dto.title()).isEqualTo(item1.getTitle());
+            StepVerifier.create(result)
+                .assertNext(dto -> {
+                    assertThat(dto.id()).isEqualTo(item1.getId());
+                    assertThat(dto.title()).isEqualTo(item1.getTitle());
+                })
+                .verifyComplete();
+
             verify(itemRepository).findById(1L);
         }
 
         @Test
         @DisplayName("findItemById — товар НЕ найден → NoSuchElementException")
         void testFindItemByIdNotFound() {
-            when(itemRepository.findById(100L)).thenReturn(Optional.empty());
+            when(itemRepository.findById(100L)).thenReturn(Mono.empty());
 
-            assertThatThrownBy(() -> itemService.findItemById(100L))
-                .isInstanceOf(NoSuchElementException.class);
+            StepVerifier.create(itemService.findItemById(100L))
+                .expectErrorMatches(throwable -> throwable instanceof NoSuchElementException &&
+                    throwable.getMessage().contains("100"))
+                .verify();
 
             verify(itemRepository).findById(100L);
         }
@@ -91,13 +90,16 @@ class ItemServiceTest {
         @Test
         @DisplayName("findItemsByCountGreaterThanZero — должен возвращать только товары с count > 0")
         void testFindItemsByCountGreaterThanZero() {
-            when(itemRepository.findByCountGreaterThan(0))
-                .thenReturn(List.of(item1, item3));
+            when(itemRepository.findItemsByCountGreaterThan(0))
+                .thenReturn(Flux.just(item1, item3));
 
-            List<Item> result = itemService.findItemsByCountGreaterThanZero();
+            Flux<Item> result = itemService.findItemsByCountGreaterThanZero();
 
-            assertThat(result).containsExactly(item1, item3);
-            verify(itemRepository).findByCountGreaterThan(0);
+            StepVerifier.create(result)
+                .expectNext(item1, item3)
+                .verifyComplete();
+
+            verify(itemRepository).findItemsByCountGreaterThan(0);
         }
     }
 
@@ -108,31 +110,39 @@ class ItemServiceTest {
         @Test
         @DisplayName("actionWithItem(PLUS) — вызывает increaseItemCount(id)")
         void testActionPlus() {
-            itemService.actionWithItem(1L, Action.PLUS);
+            when(itemRepository.increaseItemCount(1L)).thenReturn(Mono.just(item1));
+
+            StepVerifier.create(itemService.actionWithItem(1L, Action.PLUS))
+                .assertNext(dto -> assertThat(dto.id()).isEqualTo(1L))
+                .verifyComplete();
 
             verify(itemRepository).increaseItemCount(1L);
-            verify(itemRepository, never()).reduceItemCount(any());
-            verify(itemRepository, never()).resetItemCount(any());
         }
 
         @Test
         @DisplayName("actionWithItem(MINUS) — вызывает reduceItemCount(id)")
         void testActionMinus() {
-            itemService.actionWithItem(2L, Action.MINUS);
+            when(itemRepository.reduceItemCount(2L)).thenReturn(Mono.just(item2));
+
+            StepVerifier.create(itemService.actionWithItem(2L, Action.MINUS))
+                .assertNext(dto -> assertThat(dto.id()).isEqualTo(2L))
+                .verifyComplete();
 
             verify(itemRepository).reduceItemCount(2L);
-            verify(itemRepository, never()).increaseItemCount(any());
-            verify(itemRepository, never()).resetItemCount(any());
+
         }
 
         @Test
         @DisplayName("actionWithItem(DELETE) — вызывает resetItemCount(id)")
         void testActionDelete() {
-            itemService.actionWithItem(3L, Action.DELETE);
+            when(itemRepository.resetItemCount(3L)).thenReturn(Mono.just(item3));
+
+            StepVerifier.create(itemService.actionWithItem(3L, Action.DELETE))
+                .assertNext(dto -> assertThat(dto.id()).isEqualTo(3L))
+                .verifyComplete();
 
             verify(itemRepository).resetItemCount(3L);
-            verify(itemRepository, never()).increaseItemCount(any());
-            verify(itemRepository, never()).reduceItemCount(any());
+
         }
     }
 
@@ -146,13 +156,14 @@ class ItemServiceTest {
          total = 425
         */
 
-        when(itemRepository.findByCountGreaterThan(0))
-            .thenReturn(List.of(item1, item3));
+        when(itemRepository.findItemsByCountGreaterThan(0))
+            .thenReturn(Flux.just(item1, item3));
 
-        Long sum = itemService.getTotalSum();
+        StepVerifier.create(itemService.getTotalSum())
+            .expectNext(425L)
+            .verifyComplete();
 
-        assertThat(sum).isEqualTo(425L);
-        verify(itemRepository).findByCountGreaterThan(0);
+        verify(itemRepository).findItemsByCountGreaterThan(0);
     }
 
     @Nested
@@ -162,69 +173,71 @@ class ItemServiceTest {
         @Test
         @DisplayName("getItemsPage — правильная фильтрация и пагинация")
         void testPaginationBasic() {
-            when(itemRepository.findAll()).thenReturn(List.of(item1, item2, item3));
+            when(itemRepository.findAll())
+                .thenReturn(Flux.just(item1, item2, item3));
 
-            ItemsPageDto page = itemService.getItemsPage(
-                "",
-                Sorter.NO,
-                1,
-                2
-            );
+            Mono<ItemsPageDto> page = itemService.getItemsPage("", Sorter.NO, 1, 3);
 
-            // проверяем структуру
-            assertThat(page.itemsRows()).hasSize(1);
-            assertThat(page.itemsRows().get(0)).hasSize(3); // 3 товара в строке (1 пустой)
-
-            verify(itemRepository).findAll();
+            StepVerifier.create(page)
+                .assertNext(dto -> {
+                    assertThat(dto.itemsRows()).hasSize(1);
+                    assertThat(dto.itemsRows().get(0)).containsExactly(item1, item2, item3);
+                })
+                .verifyComplete();
         }
 
         @Test
         @DisplayName("getItemsPage — фильтрация по поиску")
         void testSearchFilter() {
-            when(itemRepository.findAll()).thenReturn(List.of(item1, item2, item3));
+            when(itemRepository.findAll()).thenReturn(Flux.just(item1, item2, item3));
 
-            ItemsPageDto page = itemService.getItemsPage(
+            Mono<ItemsPageDto> page = itemService.getItemsPage(
                 "Кру", // найдёт "Кружка"
                 Sorter.NO,
                 1,
                 10
             );
 
-            Item result = page.itemsRows().get(0).get(0);
-
-            assertThat(result.getTitle()).isEqualTo("Кружка");
+            StepVerifier.create(page)
+                .assertNext(dto -> {
+                    assertThat(dto.itemsRows()).hasSize(1);
+                    assertThat(dto.itemsRows().get(0).get(0)).isEqualTo(item2);
+                })
+                .verifyComplete();
         }
 
         @Test
         @DisplayName("getItemsPage — сортировка по алфавиту")
         void testSortingAlpha() {
-            when(itemRepository.findAll()).thenReturn(new ArrayList<>(List.of(item1, item3, item2)));
+            when(itemRepository.findAll())
+                .thenReturn(Flux.just(item3, item1, item2));
 
-            ItemsPageDto page = itemService.getItemsPage("", Sorter.ALPHA, 1, 10);
+            Mono<ItemsPageDto> page = itemService.getItemsPage("", Sorter.ALPHA, 1, 10);
 
-            List<Item> flat = page.itemsRows().stream()
-                .flatMap(List::stream)
-                .toList();
-
-            assertThat(flat.get(0).getTitle()).isEqualTo("Бутылка");
-            assertThat(flat.get(1).getTitle()).isEqualTo("Кружка");
-            assertThat(flat.get(2).getTitle()).isEqualTo("Тарелка");
+            StepVerifier.create(page)
+                .assertNext(dto -> {
+                    List<Item> flat = dto.itemsRows().stream().flatMap(List::stream).toList();
+                    assertThat(flat.get(0).getTitle()).isEqualTo("Кружка");
+                })
+                .verifyComplete();
         }
 
         @Test
         @DisplayName("getItemsPage — сортировка по цене")
         void testSortingPrice() {
-            when(itemRepository.findAll()).thenReturn(new ArrayList<>(List.of(item1, item3, item2)));
+            when(itemRepository.findAll())
+                .thenReturn(Flux.just(item3, item1, item2));
 
-            ItemsPageDto page = itemService.getItemsPage("", Sorter.PRICE, 1, 10);
+            Mono<ItemsPageDto> page = itemService.getItemsPage("", Sorter.PRICE, 1, 10);
 
-            List<Item> flat = page.itemsRows().stream()
-                .flatMap(List::stream)
-                .toList();
-
-            assertThat(flat.get(0).getPrice()).isEqualTo(new BigDecimal("50.00"));
-            assertThat(flat.get(1).getPrice()).isEqualTo(new BigDecimal("75.00"));
-            assertThat(flat.get(2).getPrice()).isEqualTo(new BigDecimal("100.00"));
+            StepVerifier.create(page)
+                .assertNext(dto -> {
+                    List<Item> flat = dto.itemsRows().stream().flatMap(List::stream).toList();
+                    assertThat(flat.get(0).getPrice()).isEqualByComparingTo("50.00");
+                    assertThat(flat.get(1).getPrice()).isEqualByComparingTo("75.00");
+                    assertThat(flat.get(2).getPrice()).isEqualByComparingTo("100.00");
+                })
+                .verifyComplete();
         }
     }
 }

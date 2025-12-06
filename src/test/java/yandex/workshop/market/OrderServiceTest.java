@@ -4,9 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -14,12 +12,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.reactive.TransactionalOperator;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import yandex.workshop.market.dto.Action;
-import yandex.workshop.market.dto.OrderDto;
-import yandex.workshop.market.dto.mapperDto.OrderDtoMapper;
+import yandex.workshop.market.dto.ItemDto;
 import yandex.workshop.market.entity.Item;
 import yandex.workshop.market.entity.Order;
 import yandex.workshop.market.entity.OrderItem;
+import yandex.workshop.market.repository.OrderItemRepository;
 import yandex.workshop.market.repository.OrderRepository;
 import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.OrderService;
@@ -28,7 +30,13 @@ import yandex.workshop.market.service.OrderService;
 public class OrderServiceTest {
 
     @MockitoBean
+    private TransactionalOperator transactionalOperator;
+
+    @MockitoBean
     private OrderRepository orderRepository;
+
+    @MockitoBean
+    private OrderItemRepository orderItemRepository;
 
     @MockitoBean
     private ItemService itemService;
@@ -41,23 +49,26 @@ public class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        when(transactionalOperator.transactional(any(Mono.class))).thenAnswer(inv -> inv.getArgument(0));
         item1 = new Item(1L, "Товар 1", "desc", "", new BigDecimal("100.00"), 2);
         item2 = new Item(2L, "Товар 2", "desc", "", new BigDecimal("50.00"), 3);
+
     }
 
     @Test
     @DisplayName("findAllOrders — возвращает список всех заказов")
     void testFindAllOrders() {
-        Order o1 = new Order(1L, List.of(), 100L);
-        Order o2 = new Order(2L, List.of(), 200L);
+        Order o1 = new Order(1L,  100L);
+        Order o2 = new Order(2L, 200L);
 
-        when(orderRepository.findAll()).thenReturn(List.of(o1, o2));
+        when(orderRepository.findAll()).thenReturn(Flux.just(o1, o2));
+        when(orderItemRepository.findByOrderId(anyLong())).thenReturn(Flux.empty());
+        when(itemService.findItemById(anyLong())).thenReturn(Mono.empty());
 
-        List<OrderDto> result = orderService.findAllOrders();
-
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).id()).isEqualTo(1L);
-        assertThat(result.get(1).id()).isEqualTo(2L);
+        StepVerifier.create(orderService.findAllOrders())
+            .expectNextMatches(dto -> dto.id() == 1L)
+            .expectNextMatches(dto -> dto.id() == 2L)
+            .verifyComplete();
 
         verify(orderRepository).findAll();
     }
@@ -69,14 +80,17 @@ public class OrderServiceTest {
         @Test
         @DisplayName("findOrderById — заказ найден")
         void testFindOrderByIdSuccess() {
-            Order order = new Order(10L, List.of(), 500L);
+            Order order = new Order(10L, 500L);
 
-            when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+            when(orderRepository.findById(10L)).thenReturn(Mono.just(order));
+            when(orderItemRepository.findByOrderId(10L)).thenReturn(Flux.empty());
 
-            OrderDto dto = orderService.findOrderById(10L);
-
-            assertThat(dto.id()).isEqualTo(10L);
-            assertThat(dto.totalSum()).isEqualTo(500L);
+            StepVerifier.create(orderService.findOrderById(10L))
+                .assertNext(dto -> {
+                    assertThat(dto.id()).isEqualTo(10L);
+                    assertThat(dto.totalSum()).isEqualTo(500L);
+                })
+                .verifyComplete();
 
             verify(orderRepository).findById(10L);
         }
@@ -84,11 +98,14 @@ public class OrderServiceTest {
         @Test
         @DisplayName("findOrderById — заказ НЕ найден → NoSuchElementException")
         void testFindOrderByIdNotFound() {
-            when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+            when(orderRepository.findById(99L)).thenReturn(Mono.empty());
 
-            assertThatThrownBy(() -> orderService.findOrderById(99L))
-                .isInstanceOf(NoSuchElementException.class)
-                .hasMessageContaining("99");
+            StepVerifier.create(orderService.findOrderById(99L))
+                .expectErrorSatisfies(ex -> {
+                    assertThat(ex).isInstanceOf(NoSuchElementException.class)
+                        .hasMessageContaining("99");
+                })
+                .verify();
 
             verify(orderRepository).findById(99L);
         }
@@ -98,54 +115,83 @@ public class OrderServiceTest {
     @DisplayName("createOrder — создаёт заказ, очищает корзину и возвращает DTO")
     void testCreateOrder() {
         when(itemService.findItemsByCountGreaterThanZero())
-            .thenReturn(List.of(item1, item2));
+            .thenReturn(Flux.just(item1, item2));
 
-        when(itemService.getTotalSum()).thenReturn(350L); // 100*2 + 50*3 = 350
+        when(itemService.getTotalSum()).thenReturn(Mono.just(350L)); // 100*2 + 50*3 = 350
 
-        Order saved = new Order();
-        saved.setId(5L);
-        saved.setTotalSum(350L);
+        Order savedOrder = new Order();
+        savedOrder.setId(5L);
+        savedOrder.setTotalSum(350L);
 
-        when(orderRepository.save(any(Order.class))).thenReturn(saved);
+        when(orderRepository.save(any(Order.class))).thenReturn(Mono.just(savedOrder));
 
-        OrderDto result = orderService.createOrder();
+        OrderItem oi1 = new OrderItem(null, 1L, 5L, 2);
+        OrderItem oi2 = new OrderItem(null, 2L, 5L, 3);
+
+        when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.just(oi1, oi2));
+
+        when(itemService.findItemById(1L))
+            .thenReturn(Mono.just(new ItemDto(
+                1L, "Товар 1", BigDecimal.valueOf(100), 2, "", "desc"
+            )));
+
+        when(itemService.findItemById(2L))
+            .thenReturn(Mono.just(new ItemDto(
+                2L, "Товар 2", BigDecimal.valueOf(50), 3, "", "desc"
+            )));
+
+        when(orderItemRepository.saveAll(anyList())).thenAnswer(inv -> Flux.fromIterable(inv.getArgument(0)));
+        when(itemService.actionWithItem(anyLong(), eq(Action.DELETE))).thenReturn(Mono.empty());
+
+        StepVerifier.create(orderService.createOrder())
+            .assertNext(dto -> {
+                assertThat(dto.id()).isEqualTo(5L);
+                assertThat(dto.totalSum()).isEqualTo(350L);
+                assertThat(dto.items()).hasSize(2);
+            })
+            .verifyComplete();
 
         verify(itemService).actionWithItem(1L, Action.DELETE);
         verify(itemService).actionWithItem(2L, Action.DELETE);
-
         verify(orderRepository).save(any(Order.class));
         verify(itemService).getTotalSum();
-
-        assertThat(result.id()).isEqualTo(5L);
-        assertThat(result.totalSum()).isEqualTo(350L);
     }
 
     @Test
     @DisplayName("createOrder — корректно создаёт OrderItem для каждого Item")
     void testCreateOrderOrderItemsStructure() {
         when(itemService.findItemsByCountGreaterThanZero())
-            .thenReturn(List.of(item1));
+            .thenReturn(Flux.just(item1));
 
-        when(itemService.getTotalSum()).thenReturn(200L); // 100 * 2
+        when(itemService.getTotalSum()).thenReturn(Mono.just(200L)); // 100 * 2
 
-          when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
             Order order = inv.getArgument(0);
             order.setId(1L);
-            return order;
+            return Mono.just(order);
         });
 
-        OrderDto dto = orderService.createOrder();
+        when(orderItemRepository.saveAll(anyList()))
+            .thenAnswer(inv -> Flux.fromIterable(inv.getArgument(0)));
 
-        Order orderCaptured =
-            OrderDtoMapper.INSTANCE.toEntity(dto);
+        OrderItem created = new OrderItem(null, 1L, 1L, 2);
+        when(orderItemRepository.findByOrderId(1L)).thenReturn(Flux.just(created));
 
-        assertThat(dto.totalSum()).isEqualTo(200L);
-        assertThat(orderCaptured.getItems()).hasSize(1);
+        when(itemService.findItemById(1L))
+            .thenReturn(Mono.just(
+                new ItemDto(1L, "Item1", new BigDecimal("100"), 2, null, null)
+            ));
 
-        OrderItem orderItem = orderCaptured.getItems().get(0);
+        when(itemService.actionWithItem(anyLong(), eq(Action.DELETE))).thenReturn(Mono.empty());
 
-        assertThat(orderItem.getItem().getId()).isEqualTo(1L);
-        assertThat(orderItem.getCount()).isEqualTo(2);
+        StepVerifier.create(orderService.createOrder())
+            .assertNext(dto -> {
+                assertThat(dto.totalSum()).isEqualTo(200L);
+                assertThat(dto.items()).hasSize(1);
+                assertThat(dto.items().get(0).id()).isEqualTo(1L);
+                assertThat(dto.items().get(0).count()).isEqualTo(2);
+            })
+            .verifyComplete();
 
         verify(itemService).actionWithItem(1L, Action.DELETE);
     }

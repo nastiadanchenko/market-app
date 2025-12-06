@@ -1,24 +1,27 @@
 spring:
   application:
     name: market-app
-
-  datasource:
-    driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:5432/market
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/market
     username: postgres
     password: password
+    name: market
 
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: true
-
-  liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.yaml
+  sql:
+    init:
+      mode: embedded
+      schema-locations: classpath:schema.sql
 
 logging:
   level:
     yandex.workshop.market: DEBUG
+    io.r2dbc: DEBUG
+    org.springframework.r2dbc: DEBUG
 
 server:
   port: 8080
+
+#  liquibase:
+#    change-log: classpath:db/changelog/db.changelog-master.yaml
+#    default-schema: public
+#    enabled: true
