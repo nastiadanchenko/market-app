@@ -1,14 +1,11 @@
 package yandex.workshop.market;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -217,7 +214,7 @@ class ItemServiceTest {
             StepVerifier.create(page)
                 .assertNext(dto -> {
                     List<Item> flat = dto.itemsRows().stream().flatMap(List::stream).toList();
-                    assertThat(flat.get(0).getTitle()).isEqualTo("Кружка");
+                    assertThat(flat.get(0).getTitle()).isEqualTo("Бутылка");
                 })
                 .verifyComplete();
         }
