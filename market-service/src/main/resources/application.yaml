@@ -12,11 +12,22 @@ spring:
       mode: embedded
       schema-locations: classpath:schema.sql
 
+  data:
+    redis:
+      port: 6380
+      host: localhost
+  cache:
+    redis:
+      time-to-live: PT1M
+
+
+
 logging:
   level:
     yandex.workshop.market: DEBUG
     io.r2dbc: DEBUG
     org.springframework.r2dbc: DEBUG
+    org.springframework.cache: DEBUG
 
 server:
   port: 8080
@@ -25,3 +36,9 @@ server:
 #    change-log: classpath:db/changelog/db.changelog-master.yaml
 #    default-schema: public
 #    enabled: true
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    url: /market-api

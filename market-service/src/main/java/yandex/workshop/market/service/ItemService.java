@@ -6,6 +6,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -24,12 +27,14 @@ public class ItemService {
 
     private final ItemRepository itemRepository;
 
+    @Cacheable(value = "items", key = "#itemId")
     public Mono<ItemDto> findItemById(Long itemId) {
         return itemRepository.findById(itemId)
             .switchIfEmpty(Mono.error(new NoSuchElementException("Товар с id " + itemId + " не найден")))
             .map(ItemMapper.INSTANCE::toDto);
     }
 
+    @CachePut(value = "items", key = "#itemId")
     public Mono<ItemDto> actionWithItem(Long itemId, Action action) {
         return switch (action) {
             case PLUS -> increaseItemQuantity(itemId).map(ItemMapper.INSTANCE::toDto);
@@ -51,14 +56,17 @@ public class ItemService {
 
     }
 
+    @Cacheable(value = "itemsInCart")
     public Flux<ItemDto> findItemsDtoByCountGreaterThanZero() {
         return findItemsByCountGreaterThanZero().map(ItemMapper.INSTANCE::toDto);
     }
 
+    @Cacheable(value = "itemsInCart")
     public Flux<Item> findItemsByCountGreaterThanZero() {
         return itemRepository.findItemsByCountGreaterThan(0);
     }
 
+    @Cacheable(value = "itemsInCartTotal")
     public Mono<Long> getTotalSum() {
         return findItemsByCountGreaterThanZero()
             .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getCount())))
@@ -66,6 +74,7 @@ public class ItemService {
             .map(BigDecimal::longValue);
     }
 
+    @Cacheable(value = "itemList", key = "'page:' + #pageNumber + ':size:' + #pageSize + ':search:' + #search + ':sort:' + #sort")
     public Mono<ItemsPageDto> getItemsPage(String search,
                                      Sorter sort,
                                      Integer pageNumber,
