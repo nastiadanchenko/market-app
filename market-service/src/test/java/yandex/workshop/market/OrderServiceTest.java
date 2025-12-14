@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
@@ -27,6 +28,7 @@ import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.OrderService;
 
 @SpringBootTest
+@ActiveProfiles("test")
 public class OrderServiceTest {
 
     @MockitoBean

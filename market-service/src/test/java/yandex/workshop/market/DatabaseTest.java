@@ -12,8 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Description;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -29,6 +31,8 @@ import java.util.ArrayList;
 @DataR2dbcTest
 @Testcontainers
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+@ActiveProfiles("test")
+@Import({TestCacheConfig.class})
 public class DatabaseTest {
 
     @Autowired
@@ -112,20 +116,6 @@ public class DatabaseTest {
         orderItemRepository.save(oi3).block();
 
         orderItemRepository.saveAll(List.of(oi1, oi2)).collectList().block();
-//        orderRepository.deleteAll();
-//
-//        Order order1 = new Order();
-//        OrderItem orderItem1 = new OrderItem(null, items.get(0), order1, 2);
-//        OrderItem orderItem2 = new OrderItem(null, items.get(2), order1, 1);
-//        order1.setItems(List.of(orderItem1, orderItem2));
-//        order1.setTotalSum(275L);
-//
-//        Order order2 = new Order();
-//        OrderItem orderItem3 = new OrderItem(null, items.get(1), order2, 3);
-//        order2.setItems(List.of(orderItem3));
-//        order2.setTotalSum(150L);
-//
-//        orderRepository.saveAll(List.of(order1, order2));
     }
 
     @Nested

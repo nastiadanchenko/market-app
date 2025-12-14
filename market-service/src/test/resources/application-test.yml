@@ -1,0 +1,26 @@
+spring:
+#  profiles: test
+  application:
+    name: market-app
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/market
+    username: postgres
+    password: password
+    name: market
+
+  sql:
+    init:
+      mode: embedded
+      schema-locations: classpath:schema.sql
+
+  data:
+    redis:
+      port: 6380
+      host: localhost
+
+  cache:
+    type: simple   # отключаем Redis в тестах
+
+logging:
+  level:
+    org.springframework.cache: DEBUG

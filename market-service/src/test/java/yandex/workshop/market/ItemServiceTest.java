@@ -16,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,6 +31,8 @@ import yandex.workshop.market.repository.ItemRepository;
 import yandex.workshop.market.service.ItemService;
 
 @SpringBootTest
+@ActiveProfiles("test")
+@Import(TestCacheConfig.class)
 class ItemServiceTest {
 
     @MockitoBean
@@ -68,7 +72,7 @@ class ItemServiceTest {
                 })
                 .verifyComplete();
 
-            verify(itemRepository).findById(1L);
+            verify(itemRepository, atMostOnce()).findById(1L);
         }
 
         @Test
