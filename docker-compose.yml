@@ -14,6 +14,23 @@ services:
     image: redis:7.4.2-bookworm
     ports: ["6379:6379"]
 
+  keycloak:
+    image: keycloak/keycloak:26.4
+    container_name: keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8085:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/realms/master" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   payment-service:
     image: yourrepo/payment-service:latest
     build:
@@ -36,10 +53,16 @@ services:
       - SPRING_R2DBC_URL=r2dbc:postgresql://postgres:5432/market
       - SPRING_REDIS_HOST=redis
       - PAYMENT_SERVICE_URL=http://payment-service:8081
+      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/market
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_CLIENT_ID:market-client
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_CLIENT_SECRET:market-secret
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_AUTHORIZATION_GRANT_TYPE:client_credentials
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_SCOPE:payments
     ports: ["8080:8080"]
     depends_on:
       - postgres
       - redis
+      - keycloak
       - payment-service
 
 volumes:
