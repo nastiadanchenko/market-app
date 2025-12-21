@@ -1,7 +1,6 @@
 package yandex.workshop.market.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -15,7 +14,12 @@ public class PaymentService {
 
     public Mono<Double> getBalance() {
         return paymentApi.paymentsBalanceGetWithHttpInfo()
-            .mapNotNull(HttpEntity::getBody)
+            .flatMap(response -> {
+                if (response.getBody() == null) {
+                    return Mono.error(new IllegalStateException("Payment service returned empty balance response"));
+                }
+                return Mono.just(response.getBody());
+            })
             .map(BalanceResponse::getBalance);
     }
 

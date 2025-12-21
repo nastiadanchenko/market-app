@@ -1,6 +1,7 @@
 package yandex.workshop.payment;
 
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -11,15 +12,24 @@ import yandex.workshop.payment.model.BalanceResponse;
 import yandex.workshop.payment.model.PaymentRequest;
 import yandex.workshop.payment.model.PaymentResponse;
 
+/**
+ * ВНИМАНИЕ:
+ * Баланс хранится в памяти приложения.
+ * При рестарте контейнера состояние теряется.
+ * Реализация предназначена только для учебного / демонстрационного проекта.
+ */
 @RestController
 public class PaymentsApiController implements DefaultApi {
 
-    private final AtomicReference<Double> balance =
-        new AtomicReference<>(1000.00);
+    @Value("${balance.value}")
+    private Double balance;
+
+    // Баланс хранится в памяти, сбрасывается при рестарте.
+    private final AtomicReference<Double> balanceInCents = new AtomicReference<>(balance);
 
     @Override
     public Mono<ResponseEntity<BalanceResponse>> paymentsBalanceGet(ServerWebExchange exchange) {
-        BalanceResponse r = new BalanceResponse().balance(balance.get());
+        BalanceResponse r = new BalanceResponse().balance(balance);
         return Mono.just(ResponseEntity.ok(r));
     }
 
@@ -38,18 +48,17 @@ public class PaymentsApiController implements DefaultApi {
                     return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp));
                 }
 
-                Double current = balance.get();
+                Double current = balanceInCents.get();
                 if (current < amount) {
                     PaymentResponse resp = new PaymentResponse();
                     resp.setSuccess(false);
                     resp.setMessage("Insufficient funds");
                     return Mono.just(ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(resp));
                 }
-
-                balance.updateAndGet(b -> b - req.getAmount());
+                balanceInCents.updateAndGet(b -> b - req.getAmount());
                 PaymentResponse resp = new PaymentResponse();
                 resp.setSuccess(true);
-                resp.setMessage("Payment successful. Remaining balance: " + String.format("%.2f", balance.get()));
+                resp.setMessage("Payment successful. Remaining balance: " + String.format("%.2f", balanceInCents.get()));
                 return Mono.just(ResponseEntity.ok(resp));
             })
             .switchIfEmpty(Mono.fromSupplier(() -> {

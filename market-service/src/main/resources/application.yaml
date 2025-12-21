@@ -1,6 +1,6 @@
 spring:
   application:
-    name: market-app
+    name: market-service
   r2dbc:
     url: r2dbc:postgresql://localhost:5432/market
     username: postgres
@@ -14,7 +14,7 @@ spring:
 
   data:
     redis:
-      port: 6380
+      port: 6379
       host: localhost
   cache:
     redis:

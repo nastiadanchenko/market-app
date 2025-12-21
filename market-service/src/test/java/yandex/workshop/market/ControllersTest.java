@@ -20,7 +20,9 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import yandex.workshop.market.api.DefaultApi;
-import yandex.workshop.market.controller.ApiController;
+import yandex.workshop.market.controller.CartController;
+import yandex.workshop.market.controller.ItemController;
+import yandex.workshop.market.controller.OrderController;
 import yandex.workshop.market.domain.BalanceResponse;
 import yandex.workshop.market.domain.PaymentResponse;
 import yandex.workshop.market.dto.Action;
@@ -33,8 +35,8 @@ import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.OrderService;
 import yandex.workshop.market.service.PaymentService;
 
-@WebFluxTest({ApiController.class, DefaultApi.class})
-public class ApiControllerTest {
+@WebFluxTest({ItemController.class, OrderController.class, CartController.class, DefaultApi.class})
+public class ControllersTest {
     @MockitoBean
     private ConnectionFactory connectionFactory;
 

@@ -23,8 +23,6 @@ subprojects {
             languageVersion = JavaLanguageVersion.of(21)
         }
     }
-//    sourceCompatibility = JavaVersion.VERSION_21
-//    targetCompatibility = JavaVersion.VERSION_21
 
     repositories {
         mavenCentral()
@@ -41,8 +39,10 @@ subprojects {
         r2dbcPostgresVersion = '0.8.13.RELEASE'
     }
 
-    tasks.withType(Test) {
-        useJUnitPlatform()
+    tasks.withType(Test).tap {
+        configureEach {
+            useJUnitPlatform()
+        }
     }
 }
 

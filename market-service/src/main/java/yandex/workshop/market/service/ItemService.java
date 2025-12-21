@@ -35,6 +35,10 @@ public class ItemService {
     }
 
     @CachePut(value = "items", key = "#itemId")
+    @CacheEvict(
+        value = { "itemsInCart", "itemsInCartTotal" },
+        allEntries = true
+    )
     public Mono<ItemDto> actionWithItem(Long itemId, Action action) {
         return switch (action) {
             case PLUS -> increaseItemQuantity(itemId).map(ItemMapper.INSTANCE::toDto);
@@ -61,7 +65,6 @@ public class ItemService {
         return findItemsByCountGreaterThanZero().map(ItemMapper.INSTANCE::toDto);
     }
 
-    @Cacheable(value = "itemsInCart")
     public Flux<Item> findItemsByCountGreaterThanZero() {
         return itemRepository.findItemsByCountGreaterThan(0);
     }

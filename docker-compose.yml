@@ -27,8 +27,8 @@ services:
       - postgres
       - redis
 
-  market-app:
-    image: yourrepo/market-app:latest
+  market-service:
+    image: yourrepo/market-service:latest
     build:
       context: .
       dockerfile: ./market-app/Dockerfile
