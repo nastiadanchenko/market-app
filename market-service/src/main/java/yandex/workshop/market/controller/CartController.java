@@ -1,5 +1,6 @@
 package yandex.workshop.market.controller;
 
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.reactive.result.view.Rendering;
 import reactor.core.publisher.Mono;
 import yandex.workshop.market.dto.Action;
+import yandex.workshop.market.service.CartService;
 import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.PaymentService;
 
@@ -17,10 +19,9 @@ import yandex.workshop.market.service.PaymentService;
 @RequestMapping("/cart")
 public class CartController {
 
-    private final ItemService itemService;
-
     private final PaymentService paymentService;
 
+    private final CartService cartService;
 
     /**
      * Получение страницы с товарами в корзине
@@ -30,42 +31,40 @@ public class CartController {
      * @return страница корзины
      */
     @GetMapping("/items")
-    public Mono<Rendering> getCartItemsPage() {
-        return itemService.findItemsDtoByCountGreaterThanZero()
-            .collectList()
-            .flatMap(items ->
-                itemService.getTotalSum()
-                    .flatMap(total ->
-                        paymentService.getBalance()
-                            .map(balance -> {
+    public Mono<Rendering> getCartPage() {
+        return cartService.getCurrentUserCartDto()
+            .flatMap(cart ->
+                paymentService.getBalance()
+                    .map(balance -> {
 
-                                boolean canCheckout =
-                                    balance != null && balance >= total.doubleValue();
+                        boolean canCheckout =
+                            balance != null &&
+                                BigDecimal.valueOf(balance).compareTo(cart.total()) >= 0;
 
-                                return Rendering.view("cart")
-                                    .modelAttribute("items", items)
-                                    .modelAttribute("total", total)
-                                    .modelAttribute("canCheckout", canCheckout)
-                                    .modelAttribute(
-                                        "paymentMessage",
-                                        canCheckout ? "" : "Недостаточно средств"
-                                    )
-                                    .build();
-                            })
-                            .onErrorResume(ex ->
-                                Mono.just(
-                                    Rendering.view("cart")
-                                        .modelAttribute("items", items)
-                                        .modelAttribute("total", total)
-                                        .modelAttribute("canCheckout", false)
-                                        .modelAttribute(
-                                            "paymentMessage",
-                                            "Платежная услуга недоступна"
-                                        )
-                                        .build()
-                                )
+                        return Rendering.view("cart")
+                            .modelAttribute("items", cart.items())
+                            .modelAttribute("total", cart.total())
+                            .modelAttribute("canCheckout", canCheckout)
+                            .modelAttribute(
+                                "paymentMessage",
+                                canCheckout ? "" : "Недостаточно средств"
                             )
-                    ));
+                            .build();
+                    })
+                    .onErrorResume(ex ->
+                        Mono.just(
+                            Rendering.view("cart")
+                                .modelAttribute("items", cart.items())
+                                .modelAttribute("total", cart.total())
+                                .modelAttribute("canCheckout", false)
+                                .modelAttribute(
+                                    "paymentMessage",
+                                    "Платежная услуга недоступна"
+                                )
+                                .build()
+                        )
+                    )
+            );
     }
 
     /**
@@ -78,8 +77,11 @@ public class CartController {
     @PostMapping("/items")
     public Mono<Rendering> modifyCartItem(@RequestParam("id") Long itemId,
                                           @RequestParam Action action) {
-        return itemService.actionWithItem(itemId, action)
-            .then(Mono.fromCallable(() -> Rendering.redirectTo("/cart/items").build()));
+        return cartService.actionWithItem(itemId, action)
+            .then(Mono.fromCallable(() ->
+                Rendering
+                    .redirectTo("/cart/items")
+                    .build()));
     }
 
 }
