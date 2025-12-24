@@ -14,12 +14,38 @@ spring:
 
   data:
     redis:
-      port: 6379
+      port: 6380
       host: localhost
   cache:
     redis:
       time-to-live: PT1M
 
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+#            issuer-uri: http://localhost:8085/realms/market
+            authorization-uri: http://localhost:8085/realms/market/protocol/openid-connect/auth
+            token-uri: http://localhost:8085/realms/market/protocol/openid-connect/token
+            jwk-set-uri: http://localhost:8085/realms/market/protocol/openid-connect/certs
+        registration:
+          keycloak:
+            authorizationGrantType: authorization_code
+            provider: keycloak
+            client-id: market-client
+            client-secret: QgyEWmOv2CjC0JurE8p1G871GL2C9WCk
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid, profile, email
+            authorization-grant-type: authorization_code
+      resource-server:
+        jwt:
+#          issuer-uri: http://localhost:8085/realms/market
+          jwk-set-uri: http://localhost:8085/realms/market/protocol/openid-connect/certs
+        # При необходимости задайте явные адреса:
+#          authorization-uri: http://localhost:8085/realms/master/protocol/openid-connect/auth
+#          token-uri: http://localhost:8085/realms/master/protocol/openid-connect/token
+#          user-info-uri: http://localhost:8085/realms/master/protocol/openid-connect/userinfo
 
 
 logging:
@@ -28,9 +54,11 @@ logging:
     io.r2dbc: DEBUG
     org.springframework.r2dbc: DEBUG
     org.springframework.cache: DEBUG
+    org.springframework.security: DEBUG
 
 server:
   port: 8080
+
 
 #  liquibase:
 #    change-log: classpath:db/changelog/db.changelog-master.yaml
