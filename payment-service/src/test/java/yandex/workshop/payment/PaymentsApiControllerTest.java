@@ -5,13 +5,21 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import yandex.workshop.payment.model.PaymentRequest;
 
 @WebFluxTest(controllers = PaymentsApiController.class)
+@Import(SecurityConfig.class)
 public class PaymentsApiControllerTest {
+
+    private WebTestClient authenticatedClient() {
+        return webTestClient
+            .mutateWith(SecurityMockServerConfigurers.mockJwt());
+    }
 
     @Autowired
     private WebTestClient webTestClient;
@@ -19,7 +27,8 @@ public class PaymentsApiControllerTest {
     @Test
     @DisplayName("GET /payments/balance — возвращает текущий баланс")
     void shouldReturnBalance() {
-        webTestClient.get()
+        authenticatedClient()
+            .get()
             .uri("/payments/balance")
             .exchange()
             .expectStatus().isOk()
@@ -34,7 +43,8 @@ public class PaymentsApiControllerTest {
         PaymentRequest req = new PaymentRequest();
         req.setAmount(1.0);
 
-        webTestClient.post()
+        authenticatedClient()
+            .post()
             .uri("/payments/pay")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(req)
@@ -53,7 +63,8 @@ public class PaymentsApiControllerTest {
         PaymentRequest req = new PaymentRequest();
         req.setAmount(1_000_000.0);
 
-        webTestClient.post()
+        authenticatedClient()
+            .post()
             .uri("/payments/pay")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(req)
@@ -70,7 +81,8 @@ public class PaymentsApiControllerTest {
         PaymentRequest req = new PaymentRequest();
         req.setAmount(-10.0);
 
-        webTestClient.post()
+        authenticatedClient()
+            .post()
             .uri("/payments/pay")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(req)
