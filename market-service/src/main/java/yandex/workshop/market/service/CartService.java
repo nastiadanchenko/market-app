@@ -19,18 +19,16 @@ import yandex.workshop.market.dto.mapperDto.CartMapper;
 import yandex.workshop.market.dto.mapperDto.ItemMapper;
 import yandex.workshop.market.entity.Cart;
 import yandex.workshop.market.entity.CartItem;
-import yandex.workshop.market.entity.Users;
 import yandex.workshop.market.repository.CartItemRepository;
 import yandex.workshop.market.repository.CartRepository;
 import yandex.workshop.market.repository.ItemRepository;
-import yandex.workshop.market.repository.UserRepository;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CartService {
 
-    private final UserRepository usersRepository;
+    private final UserService userService;
 
     private final CartRepository cartRepository;
 
@@ -43,55 +41,61 @@ public class CartService {
      * Получить корзину текущего авторизованного пользователя.
      * Если корзины нет — создать.
      */
-    @Cacheable(value = "userCart", key = "#root.authentication.name")
+
     public Mono<Cart> getCurrentUserCart() {
-        return currentUser()
-            .flatMap(user -> {
-                log.debug("User id for cart retrieval: {}", user.toString());
-                return cartRepository
-                    .findByUserId(user.getId())
-                    .switchIfEmpty(createCart(user.getId()));
-            });
+        return userService.currentUser()
+            .flatMap(user ->
+                getCartByUserId(user.getId())
+
+            );
     }
 
     public Mono<CartDto> getCurrentUserCartDto() {
         return getCurrentUserCart()
             .flatMap(cart -> {
                 log.debug("Cart DTO for cart id: {}", cart.getId());
-                   return cartItemRepository.findByCartId(cart.getId())
-                        .flatMap(cartItem ->
-                            itemRepository.findById(cartItem.getItemId())
-                                .map(item -> CartItemMapper.INSTANCE.toDto(cartItem, ItemMapper.INSTANCE.toDto(item, cartItem.getCount())))
-                        )
-                        .collectList()
-                        .map(items -> CartMapper.INSTANCE.toDto(cart, items));
+                return cartItemRepository.findByCartId(cart.getId())
+                    .flatMap(cartItem ->
+                        itemRepository.findById(cartItem.getItemId())
+                            .map(item -> CartItemMapper.INSTANCE.toDto(cartItem,
+                                ItemMapper.INSTANCE.toDto(item, cartItem.getCount())))
+                    )
+                    .collectList()
+                    .map(items -> CartMapper.INSTANCE.toDto(cart, items));
             });
     }
 
     /**
      * Добавить товар в корзину текущего пользователя
      */
-    @CacheEvict(
-        value = { "cartItems", "cartTotal", "userCart" },
-        key = "#root.authentication.name"
-    )
+    @CacheEvict(value = "userCart", key = "#userId")
     public Mono<CartItem> addItem(Long itemId) {
-        return getCurrentUserCart()
-            .flatMap(cart ->
-                cartItemRepository.findByCartIdAndItemId(cart.getId(), itemId)
-                    .flatMap(existing -> {
-                        existing.setCount(existing.getCount() + 1);
-                        return cartItemRepository.save(existing);
-                    })
-                    .switchIfEmpty(
-                        cartItemRepository.save(
-                            new CartItem(null, cart.getId(), itemId, 1, Instant.now())
-                        )
+        return
+            userService.currentUser()
+                .flatMap(users -> getCartByUserId(users.getId())
+                    .flatMap(cart ->
+                        cartItemRepository.findByCartIdAndItemId(cart.getId(), itemId)
+                            .flatMap(existing -> {
+                                existing.setCount(existing.getCount() + 1);
+                                return cartItemRepository.save(existing);
+                            })
+                            .switchIfEmpty(
+                                cartItemRepository.save(
+                                    new CartItem(null, cart.getId(), itemId, 1, Instant.now())
+                                )
+                            )
+                            .flatMap(savedItem ->
+                                recalculateTotalSum(cart).thenReturn(savedItem)
+                            )
                     )
-                    .flatMap(savedItem ->
-                        recalculateTotalSum(cart).thenReturn(savedItem)
-                    )
-            );
+                );
+    }
+
+    @Cacheable(value = "userCart", key = "#userId")
+    public Mono<Cart> getCartByUserId(Long userId) {
+        return cartRepository
+            .findByUserId(userId)
+            .switchIfEmpty(createCart(userId));
     }
 
     public Mono<Map<Long, Integer>> getCurrentUserCartItemCounts() {
@@ -142,8 +146,7 @@ public class CartService {
      * Полностью удалить товар из корзины
      */
     @CacheEvict(
-        value = { "cartItems", "cartTotal", "userCart" },
-        key = "#root.authentication.name"
+        value = {"cartItems", "cartTotal", "userCart"}
     )
     public Mono<Void> removeItem(Long itemId) {
         return getCurrentUserCart()
@@ -158,15 +161,16 @@ public class CartService {
      * Очистить корзину (используется после успешной покупки)
      */
     @CacheEvict(
-        value = { "cartItems", "cartTotal", "userCart" },
-        key = "#root.authentication.name"
+        value = {"cartItems", "cartTotal", "userCart"}
     )
-    public Mono<Void> clearCart() {
-        return getCurrentUserCart()
-            .flatMap(cart ->
-                cartItemRepository.deleteAllByCartId(cart.getId())
-                    .then(recalculateTotalSum(cart))
-            )
+    public Mono<Void> clearCart(Cart cart) {
+        return cartItemRepository.deleteAllByCartId(cart.getId())
+            .then(cartRepository.findById(cart.getId())
+                .flatMap(c -> {
+                    c.setTotalPrice(BigDecimal.ZERO);
+                    c.setUpdatedAt(Instant.now());
+                    return cartRepository.save(c);
+                }))
             .then();
     }
 
@@ -196,20 +200,12 @@ public class CartService {
         return cartRepository.save(new Cart(null, userId, now, now, BigDecimal.ZERO));
     }
 
-    private Mono<Users> currentUser() {
-        return ReactiveSecurityContextHolder.getContext()
-            .map(ctx -> { log.debug("Current user: {}", ctx.getAuthentication().getName());
-                return ctx.getAuthentication().getName();})
-            .flatMap(usersRepository::findByKeycloakId)
-            .switchIfEmpty(Mono.error(new IllegalStateException("User not authenticated")));
-    }
-
-
     public Flux<CartItemDto> getCartItemsDto(Long cartId) {
         return cartItemRepository.findByCartId(cartId)
             .flatMap(cartItem ->
                 itemRepository.findById(cartItem.getItemId())
-                    .map(item -> CartItemMapper.INSTANCE.toDto(cartItem,ItemMapper.INSTANCE.toDto(item)))
+                    .map(item ->
+                        CartItemMapper.INSTANCE.toDto(cartItem, ItemMapper.INSTANCE.toDto(item)))
             );
 
     }

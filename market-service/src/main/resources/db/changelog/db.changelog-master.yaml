@@ -82,7 +82,8 @@ databaseChangeLog:
                     nullable: false
               - column:
                   name: total_sum
-                  type: bigint
+                  type: numeric
+                  defaultValueNumeric: 0.00
       rollback:
         - dropTable:
             tableName: orders

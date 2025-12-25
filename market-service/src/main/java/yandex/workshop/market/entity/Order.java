@@ -1,9 +1,11 @@
 package yandex.workshop.market.entity;
 
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 @Data
@@ -13,6 +15,8 @@ import org.springframework.data.relational.core.mapping.Table;
 public class Order {
     @Id
     private Long id;
-    private Long totalSum;
+    private BigDecimal totalSum;
+    @Column("user_id")
+    private Long userId;
 
 }
