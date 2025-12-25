@@ -38,15 +38,20 @@ spring:
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope: openid, profile, email
             authorization-grant-type: authorization_code
+          payment:
+            provider: keycloak
+            client-id: payment-client
+            client-secret: HnCKANvCQmvKYaLPg9GaODWN5wOgKNlA
+            authorization-grant-type: client_credentials
       resource-server:
         jwt:
 #          issuer-uri: http://localhost:8085/realms/market
           jwk-set-uri: http://localhost:8085/realms/market/protocol/openid-connect/certs
-        # При необходимости задайте явные адреса:
-#          authorization-uri: http://localhost:8085/realms/master/protocol/openid-connect/auth
-#          token-uri: http://localhost:8085/realms/master/protocol/openid-connect/token
-#          user-info-uri: http://localhost:8085/realms/master/protocol/openid-connect/userinfo
 
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    default-schema: public
+    enabled: true
 
 logging:
   level:
@@ -59,11 +64,6 @@ logging:
 server:
   port: 8080
 
-
-#  liquibase:
-#    change-log: classpath:db/changelog/db.changelog-master.yaml
-#    default-schema: public
-#    enabled: true
 springdoc:
   api-docs:
     enabled: true
