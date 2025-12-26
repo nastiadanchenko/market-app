@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: market-service
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/market
+    username: postgres
+    password: password
+    name: market
+
+  sql:
+    init:
+      mode: embedded
+      schema-locations: classpath:schema.sql
+
+  data:
+    redis:
+      port: 6379
+      host: localhost
+  cache:
+    redis:
+      time-to-live: PT1M
+
+
+
+logging:
+  level:
+    yandex.workshop.market: DEBUG
+    io.r2dbc: DEBUG
+    org.springframework.r2dbc: DEBUG
+    org.springframework.cache: DEBUG
+
+server:
+  port: 8080
+
+#  liquibase:
+#    change-log: classpath:db/changelog/db.changelog-master.yaml
+#    default-schema: public
+#    enabled: true
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    url: /market-api

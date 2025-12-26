@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: payment-api
+
+server:
+  port: 8081
+
+balance:
+  value: 1000.00

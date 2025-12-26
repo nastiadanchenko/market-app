@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="'Ошибка ' + ${status}">Ошибка</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            background-color: #fafafa;
+            text-align: center;
+            padding-top: 80px;
+            color: #333;
+        }
+        h1 {
+            font-size: 3rem;
+            color: #c0392b;
+        }
+        p {
+            margin-top: 20px;
+            font-size: 1.2rem;
+        }
+        a {
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<h1 th:text="${status} + ' ' + ${error}">Ошибка</h1>
+<p th:text="${message}">Что-то пошло не так.</p>
+<p><a href="/static" th:href="@{/static}">На главную</a></p>
+</body>
+</html>

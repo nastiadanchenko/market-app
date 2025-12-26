@@ -1,0 +1,62 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  version: 1.0.0
+  description: API for checking balances and performing payments
+servers:
+  - url: http://localhost:8081
+paths:
+  /payments/balance:
+    get:
+      summary: Get account balance
+      responses:
+        '200':
+          description: Current balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+        '503':
+          description: Service unavailable
+  /payments/pay:
+    post:
+      summary: Make a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '402':
+          description: Payment failed (insufficient funds)
+        '503':
+          description: Payment service unavailable
+components:
+  schemas:
+    BalanceResponse:
+      type: object
+      properties:
+        balance:
+          type: number
+          format: double
+    PaymentRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: double
+      required: [amount]
+    PaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
