@@ -1,5 +1,6 @@
 version: '3.8'
 services:
+
   postgres:
     image: postgres:15
     environment:
@@ -9,21 +10,32 @@ services:
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7.4.2-bookworm
     ports: ["6379:6379"]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   keycloak:
     image: keycloak/keycloak:26.4
     container_name: keycloak
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
       - "8085:8080"
     volumes:
+      - ./keycloak/realm-market.json:/opt/keycloak/data/import/realm-market.json
       - keycloak_data:/opt/keycloak/data
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/realms/master" ]
@@ -37,33 +49,44 @@ services:
       context: .
       dockerfile: ./payment-service/Dockerfile
     environment:
-      - SPRING_R2DBC_URL=r2dbc:postgresql://postgres:5432/market
-      - SPRING_REDIS_HOST=redis
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/market
+      SPRING_R2DBC_USERNAME: postgres
+      SPRING_R2DBC_PASSWORD: password
+      SPRING_REDIS_HOST: redis
     ports: ["8081:8081"]
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   market-service:
     image: yourrepo/market-service:latest
     build:
       context: .
-      dockerfile: ./market-app/Dockerfile
+      dockerfile: ./market-service/Dockerfile
     environment:
-      - SPRING_R2DBC_URL=r2dbc:postgresql://postgres:5432/market
-      - SPRING_REDIS_HOST=redis
-      - PAYMENT_SERVICE_URL=http://payment-service:8081
-      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/market
-      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_CLIENT_ID:market-client
-      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_CLIENT_SECRET:market-secret
-      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_AUTHORIZATION_GRANT_TYPE:client_credentials
-      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_SCOPE:payments
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/market
+      SPRING_R2DBC_USERNAME: postgres
+      SPRING_R2DBC_PASSWORD: password
+      SPRING_REDIS_HOST: redis
+      PAYMENT_SERVICE_URL: http://payment-service:8081
+      SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/market
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_CLIENT_ID: market-client
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_CLIENT_SECRET: market-secret
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_AUTHORIZATION_GRANT_TYPE: client_credentials
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MARKET_CLIENT_SCOPE: openid
     ports: ["8080:8080"]
     depends_on:
-      - postgres
-      - redis
-      - keycloak
-      - payment-service
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      payment-service:
+        condition: service_started
 
 volumes:
   pgdata:
+  keycloak_data:

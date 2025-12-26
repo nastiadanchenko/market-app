@@ -1,0 +1,78 @@
+{
+  "realm": "market",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      { "name": "USER" },
+      { "name": "ADMIN" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "market-client",
+      "name": "Market UI Client",
+      "secret": "QgyEWmOv2CjC0JurE8p1G871GL2C9WCk",
+      "protocol": "openid-connect",
+
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+
+      "redirectUris": [
+        "http://localhost:8080/login/oauth2/code/keycloak"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+
+      "publicClient": false
+    },
+
+    {
+      "clientId": "payment-client",
+      "name": "Payment Service Client",
+      "secret": "HnCKANvCQmvKYaLPg9GaODWN5wOgKNlA",
+      "protocol": "openid-connect",
+
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+
+      "publicClient": false
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@test.local",
+      "firstName": "Admin",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["USER", "ADMIN"]
+    },
+    {
+      "username": "user",
+      "enabled": true,
+      "email": "user@test.local",
+      "firstName": "User",
+      "lastName": "Two",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["USER"]
+    }
+  ]
+}
