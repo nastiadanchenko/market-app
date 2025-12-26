@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.NoSuchElementException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,15 +18,18 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import yandex.workshop.market.dto.Action;
 import yandex.workshop.market.dto.ItemDto;
-import yandex.workshop.market.entity.Item;
+import yandex.workshop.market.entity.Cart;
+import yandex.workshop.market.entity.CartItem;
 import yandex.workshop.market.entity.Order;
 import yandex.workshop.market.entity.OrderItem;
+import yandex.workshop.market.entity.Users;
 import yandex.workshop.market.repository.OrderItemRepository;
 import yandex.workshop.market.repository.OrderRepository;
+import yandex.workshop.market.service.CartService;
 import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.OrderService;
+import yandex.workshop.market.service.UserService;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -41,38 +45,54 @@ public class OrderServiceTest {
     private OrderItemRepository orderItemRepository;
 
     @MockitoBean
+    private CartService cartService;
+
+    @MockitoBean
+    private UserService userService;
+
+    @MockitoBean
     private ItemService itemService;
 
     @Autowired
     private OrderService orderService;
 
-    private Item item1;
-    private Item item2;
+    private Users user;
+    private Cart cart;
 
     @BeforeEach
     void setUp() {
-        when(transactionalOperator.transactional(any(Mono.class))).thenAnswer(inv -> inv.getArgument(0));
-        item1 = new Item(1L, "Товар 1", "desc", "", new BigDecimal("100.00"), 2);
-        item2 = new Item(2L, "Товар 2", "desc", "", new BigDecimal("50.00"), 3);
+        when(transactionalOperator.transactional(any(Mono.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
 
+        user = new Users();
+        user.setId(10L);
+
+        cart = new Cart();
+        cart.setId(1L);
+        cart.setUserId(10L);
+        cart.setTotalPrice(BigDecimal.valueOf(350));
     }
 
     @Test
-    @DisplayName("findAllOrders — возвращает список всех заказов")
-    void testFindAllOrders() {
-        Order o1 = new Order(1L,  100L);
-        Order o2 = new Order(2L, 200L);
+    @DisplayName("findAllOrdersForCurrentUser — возвращает заказы текущего пользователя")
+    void findAllOrdersForCurrentUser() {
+        when(userService.currentUser()).thenReturn(Mono.just(user));
 
-        when(orderRepository.findAll()).thenReturn(Flux.just(o1, o2));
-        when(orderItemRepository.findByOrderId(anyLong())).thenReturn(Flux.empty());
-        when(itemService.findItemById(anyLong())).thenReturn(Mono.empty());
+        Order order1 = new Order(1L, BigDecimal.valueOf(100),10L );
+        Order order2 = new Order(2L, BigDecimal.valueOf(200),10L );
 
-        StepVerifier.create(orderService.findAllOrders())
-            .expectNextMatches(dto -> dto.id() == 1L)
-            .expectNextMatches(dto -> dto.id() == 2L)
+        when(orderRepository.findAllByUserId(10L))
+            .thenReturn(Flux.just(order1, order2));
+
+        when(orderItemRepository.findByOrderId(anyLong()))
+            .thenReturn(Flux.empty());
+
+        StepVerifier.create(orderService.findAllOrdersForCurrentUser())
+            .assertNext(dto -> assertThat(dto.id()).isEqualTo(1L))
+            .assertNext(dto -> assertThat(dto.id()).isEqualTo(2L))
             .verifyComplete();
 
-        verify(orderRepository).findAll();
+        verify(orderRepository).findAllByUserId(10L);
     }
 
     @Nested
@@ -82,70 +102,73 @@ public class OrderServiceTest {
         @Test
         @DisplayName("findOrderById — заказ найден")
         void testFindOrderByIdSuccess() {
-            Order order = new Order(10L, 500L);
+            Order order = new Order(5L, BigDecimal.valueOf(500),10L );
 
-            when(orderRepository.findById(10L)).thenReturn(Mono.just(order));
-            when(orderItemRepository.findByOrderId(10L)).thenReturn(Flux.empty());
+            when(orderRepository.findById(5L)).thenReturn(Mono.just(order));
+            when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.empty());
 
-            StepVerifier.create(orderService.findOrderById(10L))
+            StepVerifier.create(orderService.findOrderById(5L))
                 .assertNext(dto -> {
-                    assertThat(dto.id()).isEqualTo(10L);
+                    assertThat(dto.id()).isEqualTo(5L);
                     assertThat(dto.totalSum()).isEqualTo(500L);
+                    assertThat(dto.items()).isEmpty();
                 })
                 .verifyComplete();
-
-            verify(orderRepository).findById(10L);
         }
 
         @Test
-        @DisplayName("findOrderById — заказ НЕ найден → NoSuchElementException")
+        @DisplayName("findOrderById — заказ не найден, должно выбросится исключение NoSuchElementException")
         void testFindOrderByIdNotFound() {
             when(orderRepository.findById(99L)).thenReturn(Mono.empty());
 
             StepVerifier.create(orderService.findOrderById(99L))
-                .expectErrorSatisfies(ex -> {
-                    assertThat(ex).isInstanceOf(NoSuchElementException.class)
-                        .hasMessageContaining("99");
-                })
+                .expectErrorSatisfies(ex ->
+                    assertThat(ex)
+                        .isInstanceOf(NoSuchElementException.class)
+                        .hasMessageContaining("99")
+                )
                 .verify();
-
-            verify(orderRepository).findById(99L);
         }
     }
 
     @Test
-    @DisplayName("createOrder — создаёт заказ, очищает корзину и возвращает DTO")
+    @DisplayName("createOrder — создаёт заказ, очищает корзину")
     void testCreateOrder() {
-        when(itemService.findItemsByCountGreaterThanZero())
-            .thenReturn(Flux.just(item1, item2));
+        CartItem ci1 = new CartItem(1L, 1L, 1L, 2, Instant.now());
+        CartItem ci2 = new CartItem(2L, 1L, 2L, 3, Instant.now());
 
-        when(itemService.getTotalSum()).thenReturn(Mono.just(350L)); // 100*2 + 50*3 = 350
+        when(cartService.getCartItems(cart.getId()))
+            .thenReturn(Flux.just(ci1, ci2));
 
-        Order savedOrder = new Order();
-        savedOrder.setId(5L);
-        savedOrder.setTotalSum(350L);
+        when(cartService.clearCart(cart)).thenReturn(Mono.empty());
 
-        when(orderRepository.save(any(Order.class))).thenReturn(Mono.just(savedOrder));
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(inv -> {
+                Order o = inv.getArgument(0);
+                o.setId(5L);
+                return Mono.just(o);
+            });
 
-        OrderItem oi1 = new OrderItem(null, 1L, 5L, 2);
-        OrderItem oi2 = new OrderItem(null, 2L, 5L, 3);
+        when(orderItemRepository.saveAll(anyList()))
+            .thenReturn(Flux.empty());
 
-        when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.just(oi1, oi2));
+        when(orderItemRepository.findByOrderId(5L))
+            .thenReturn(Flux.just(
+                new OrderItem(null, 1L, 5L, 2),
+                new OrderItem(null, 2L, 5L, 3)
+            ));
 
         when(itemService.findItemById(1L))
-            .thenReturn(Mono.just(new ItemDto(
-                1L, "Товар 1", BigDecimal.valueOf(100), 2, "", "desc"
-            )));
+            .thenReturn(Mono.just(
+                new ItemDto(1L, "Товар 1", BigDecimal.valueOf(100), 0, "", "")
+            ));
 
         when(itemService.findItemById(2L))
-            .thenReturn(Mono.just(new ItemDto(
-                2L, "Товар 2", BigDecimal.valueOf(50), 3, "", "desc"
-            )));
+            .thenReturn(Mono.just(
+                new ItemDto(2L, "Товар 2", BigDecimal.valueOf(50), 0, "", "")
+            ));
 
-        when(orderItemRepository.saveAll(anyList())).thenAnswer(inv -> Flux.fromIterable(inv.getArgument(0)));
-        when(itemService.actionWithItem(anyLong(), eq(Action.DELETE))).thenReturn(Mono.empty());
-
-        StepVerifier.create(orderService.createOrder())
+        StepVerifier.create(orderService.createOrder(cart))
             .assertNext(dto -> {
                 assertThat(dto.id()).isEqualTo(5L);
                 assertThat(dto.totalSum()).isEqualTo(350L);
@@ -153,48 +176,22 @@ public class OrderServiceTest {
             })
             .verifyComplete();
 
-        verify(itemService).actionWithItem(1L, Action.DELETE);
-        verify(itemService).actionWithItem(2L, Action.DELETE);
+        verify(cartService).clearCart(cart);
         verify(orderRepository).save(any(Order.class));
-        verify(itemService).getTotalSum();
     }
 
     @Test
-    @DisplayName("createOrder — корректно создаёт OrderItem для каждого Item")
+    @DisplayName("createOrder — ошибка если корзина пуста")
     void testCreateOrderOrderItemsStructure() {
-        when(itemService.findItemsByCountGreaterThanZero())
-            .thenReturn(Flux.just(item1));
+        when(cartService.getCartItems(cart.getId()))
+            .thenReturn(Flux.empty());
 
-        when(itemService.getTotalSum()).thenReturn(Mono.just(200L)); // 100 * 2
-
-        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
-            Order order = inv.getArgument(0);
-            order.setId(1L);
-            return Mono.just(order);
-        });
-
-        when(orderItemRepository.saveAll(anyList()))
-            .thenAnswer(inv -> Flux.fromIterable(inv.getArgument(0)));
-
-        OrderItem created = new OrderItem(null, 1L, 1L, 2);
-        when(orderItemRepository.findByOrderId(1L)).thenReturn(Flux.just(created));
-
-        when(itemService.findItemById(1L))
-            .thenReturn(Mono.just(
-                new ItemDto(1L, "Item1", new BigDecimal("100"), 2, null, null)
-            ));
-
-        when(itemService.actionWithItem(anyLong(), eq(Action.DELETE))).thenReturn(Mono.empty());
-
-        StepVerifier.create(orderService.createOrder())
-            .assertNext(dto -> {
-                assertThat(dto.totalSum()).isEqualTo(200L);
-                assertThat(dto.items()).hasSize(1);
-                assertThat(dto.items().get(0).id()).isEqualTo(1L);
-                assertThat(dto.items().get(0).count()).isEqualTo(2);
-            })
-            .verifyComplete();
-
-        verify(itemService).actionWithItem(1L, Action.DELETE);
+        StepVerifier.create(orderService.createOrder(cart))
+            .expectErrorSatisfies(ex ->
+                assertThat(ex)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Корзина пуста")
+            )
+            .verify();
     }
 }

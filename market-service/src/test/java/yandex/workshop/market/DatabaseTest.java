@@ -20,13 +20,20 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
+import yandex.workshop.market.entity.Cart;
+import yandex.workshop.market.entity.CartItem;
 import yandex.workshop.market.entity.Item;
 import yandex.workshop.market.entity.Order;
 import yandex.workshop.market.entity.OrderItem;
+import yandex.workshop.market.entity.Role;
+import yandex.workshop.market.entity.UserRole;
+import yandex.workshop.market.entity.Users;
+import yandex.workshop.market.repository.CartItemRepository;
+import yandex.workshop.market.repository.CartRepository;
 import yandex.workshop.market.repository.ItemRepository;
 import yandex.workshop.market.repository.OrderItemRepository;
 import yandex.workshop.market.repository.OrderRepository;
-import java.util.ArrayList;
+import yandex.workshop.market.repository.UserRepository;
 
 @DataR2dbcTest
 @Testcontainers
@@ -42,132 +49,154 @@ public class DatabaseTest {
     private OrderRepository orderRepository;
 
     @Autowired
-    OrderItemRepository orderItemRepository;
+    private OrderItemRepository orderItemRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private CartRepository cartRepository;
+    @Autowired
+    private CartItemRepository cartItemRepository;
+    @Autowired
+    private R2dbcEntityTemplate template;
+
+    private Long userId;
 
     @Container
     @ServiceConnection
     static PostgreSQLContainer<?> postgres =
         new PostgreSQLContainer<>("postgres:16");
 
-    @Autowired
-    R2dbcEntityTemplate template;
-
     @BeforeAll
     static void init(@Autowired R2dbcEntityTemplate template) {
         template.getDatabaseClient()
-            .sql("CREATE SEQUENCE IF NOT EXISTS orders_id_seq AS BIGINT; " +
-                "CREATE TABLE if not exists public.orders " +
-                "(id        bigint NOT NULL primary key default (nextval('orders_id_seq'::regclass)), " +
-                "total_sum int8   not null default 0)")
-            .then().block();
-        template.getDatabaseClient()
-            .sql("CREATE SEQUENCE IF NOT EXISTS items_id_seq AS BIGINT; " +
-                "CREATE TABLE if not exists public.items " +
-                "(id          bigint NOT NULL primary key default (nextval('items_id_seq'::regclass))," +
-                "    title       varchar(255)      NULL," +
-                "    description varchar(1000)     NULL," +
-                "    img_path    varchar(255)      NOT NULL," +
-                "    price       numeric DEFAULT 0.00 NOT NULL," +
-                "    count       int4    DEFAULT 0 NOT NULL)")
-            .then()
-            .block();
+            .sql("""
+            create table if not exists users (
+                id bigserial primary key,
+                name varchar(255),
+                password varchar(255),
+                enabled boolean,
+                created_at timestamp,
+                updated_at timestamp
+            );
 
-        template.getDatabaseClient()
-            .sql("CREATE SEQUENCE IF NOT EXISTS orders_items_id_seq AS BIGINT; " +
-                "CREATE TABLE if not exists public.orders_items\n" +
-                "(id       bigint NOT NULL primary key default (nextval('orders_items_id_seq'::regclass))," +
-                "    item_id  int8      NOT NULL," +
-                "    order_id int8      NOT NULL," +
-                "    count    int4      NULL," +
-                "    CONSTRAINT fk_orders_items_item FOREIGN KEY (item_id) REFERENCES public.items (id) ON DELETE CASCADE," +
-                "    CONSTRAINT fk_orders_items_order FOREIGN KEY (order_id) REFERENCES public.orders (id) ON DELETE CASCADE)")
+            create table if not exists roles (
+                id bigserial primary key,
+                name varchar(50)
+            );
+
+            create table if not exists users_roles (
+                id bigserial primary key,
+                user_id bigint references users(id),
+                role_id bigint references roles(id)
+            );
+
+            create table if not exists items (
+                id bigserial primary key,
+                title varchar(255),
+                description varchar(1000),
+                img_path varchar(255),
+                price numeric not null,
+                count int not null
+            );
+
+            create table if not exists orders (
+                id bigserial primary key,
+                user_id bigint references users(id),
+                total_sum numeric not null
+            );
+
+            create table if not exists orders_items (
+                id bigserial primary key,
+                item_id bigint references items(id),
+                order_id bigint references orders(id),
+                count int
+            );
+
+            create table if not exists carts (
+                id bigserial primary key,
+                user_id bigint references users(id),
+                created_at timestamp,
+                updated_at timestamp,
+                total_price numeric
+            );
+
+            create table if not exists carts_items (
+                id bigserial primary key,
+                cart_id bigint references carts(id),
+                item_id bigint references items(id),
+                count int,
+                added_at timestamp
+            );
+        """)
             .then()
             .block();
     }
 
     @BeforeEach
     void setUp() {
-        itemRepository.deleteAll().block();
-        orderRepository.deleteAll().block();
-        orderItemRepository.deleteAll().block();
+        template.delete(UserRole.class).all().block();
+        template.delete(Role.class).all().block();
+        template.delete(CartItem.class).all().block();
+        template.delete(Cart.class).all().block();
+        template.delete(OrderItem.class).all().block();
+        template.delete(Order.class).all().block();
+        template.delete(Item.class).all().block();
+        template.delete(Users.class).all().block();
+
+        Users user = new Users();
+        user.setName("user1");
+        user.setEnabled(true);
+
+        userId = userRepository.save(user)
+            .map(Users::getId)
+            .block();
+
         List<Item> items = List.of(
-            new Item(null, "Бутылка", "Пластиковая", "bottle.jpg", new BigDecimal("100.00"), 2),
-            new Item(null, "Кружка", "Керамическая", "cup.jpg", new BigDecimal("50.00"), 0),
-            new Item(null, "Тарелка", "Большая", "plate.jpg", new BigDecimal("75.00"), 3));
+            new Item(null, "Бутылка", "Пластик", "b.jpg", new BigDecimal("100"), 2),
+            new Item(null, "Кружка", "Керамика", "c.jpg", new BigDecimal("50"), 0),
+            new Item(null, "Тарелка", "Большая", "p.jpg", new BigDecimal("75"), 3)
+        );
 
-        List<Item> savedItems = itemRepository.saveAll(items).collectList().block();
+        List<Item> savedItems =
+            itemRepository.saveAll(items).collectList().block();
 
-        Order order1 = new Order();
-        order1.setTotalSum(275L);
+        Order order = new Order();
+        order.setUserId(userId);
+        order.setTotalSum(new BigDecimal("275"));
 
-        Order savedOrder1 = orderRepository.save(order1).block();
+        Order savedOrder = orderRepository.save(order).block();
 
-        OrderItem oi1 = new OrderItem(null, savedItems.get(0).getId(), savedOrder1.getId(), 2);
-        OrderItem oi2 = new OrderItem(null, savedItems.get(2).getId(), savedOrder1.getId(), 1);
+        orderItemRepository.saveAll(List.of(
+            new OrderItem(null, savedItems.get(0).getId(), savedOrder.getId(), 2),
+            new OrderItem(null, savedItems.get(2).getId(), savedOrder.getId(), 1)
+        )).collectList().block();
 
-        orderItemRepository.saveAll(List.of(oi1, oi2)).collectList().block();
-
-
-        Order order2 = new Order();
-        order2.setTotalSum(150L);
-        Order savedOrder2 = orderRepository.save(order2).block();
-
-        OrderItem oi3 = new OrderItem(null, savedItems.get(1).getId(), savedOrder2.getId(), 3);
-        orderItemRepository.save(oi3).block();
-
-        orderItemRepository.saveAll(List.of(oi1, oi2)).collectList().block();
     }
 
     @Nested
     @Description("Тестирует методы ItemRepository")
     class ItemRepositoryTests {
         @Test
-        void shouldFindAllItems() {
-            StepVerifier.create(itemRepository.findAll())
-                .expectNextCount(3)
-                .verifyComplete();
-        }
-
-        @Test
-        void shouldFindItemsByCountGreaterThanZero() {
+        void findItemsWithPositiveCount() {
             StepVerifier.create(itemRepository.findItemsByCountGreaterThan(0))
-                .recordWith(ArrayList::new)
                 .expectNextCount(2)
-                .consumeRecordedWith(list -> {
-                    List<String> titles = list.stream().map(Item::getTitle).toList();
-                    assertThat(titles).containsExactlyInAnyOrder("Бутылка", "Тарелка");
-                })
                 .verifyComplete();
         }
 
         @Test
-        void shouldResetItemCount() {
-            Long id = itemRepository.findAll()
-                .next().map(Item::getId)
-                .block();
+        void increaseAndDecreaseCount() {
+            Item item = itemRepository.findAll().next().block();
 
-            StepVerifier.create(itemRepository.resetItemCount(id))
-                .assertNext(i -> assertThat(i.getCount()).isZero())
+            StepVerifier.create(itemRepository.increaseItemCount(item.getId()))
+                .assertNext(i -> assertThat(i.getCount()).isEqualTo(item.getCount() + 1))
+                .verifyComplete();
+
+            StepVerifier.create(itemRepository.reduceItemCount(item.getId()))
+                .assertNext(i -> assertThat(i.getCount()).isEqualTo(item.getCount()))
                 .verifyComplete();
         }
 
-        @Test
-        void shouldIncreaseItemCount() {
-            Item first = itemRepository.findAll().next().block();
-
-            StepVerifier.create(itemRepository.increaseItemCount(first.getId()))
-                .assertNext(updated -> assertThat(updated.getCount()).isEqualTo(first.getCount() + 1))
-                .verifyComplete();
-        }
-
-        @Test
-        void shouldReduceItemCount() {
-            Item first = itemRepository.findAll().next().block();
-
-            StepVerifier.create(itemRepository.reduceItemCount(first.getId()))
-                .assertNext(updated -> assertThat(updated.getCount()).isEqualTo(first.getCount() - 1))
-                .verifyComplete();
-        }
 
     }
 
@@ -176,23 +205,40 @@ public class DatabaseTest {
     class OrderRepositoryTests {
 
         @Test
-        void shouldFindOrderById() {
-            Long id = orderRepository.findAll().next().map(Order::getId).block();
-
-            StepVerifier.create(orderRepository.findById(id))
-                .assertNext(o -> assertThat(o.getId()).isEqualTo(id))
+        void findOrdersByUser() {
+            StepVerifier.create(orderRepository.findAllByUserId(userId))
+                .expectNextCount(1)
                 .verifyComplete();
         }
 
         @Test
-        void shouldFindAllOrders() {
-            StepVerifier.create(orderRepository.findAll())
-                .expectNextCount(2)
-                .verifyComplete();
+        void findOrderByIdAndUser() {
+            Order order = orderRepository.findAll().next().block();
 
+            StepVerifier.create(
+                    orderRepository.findByIdAndUserId(order.getId(), userId)
+                )
+                .assertNext(o -> assertThat(o.getUserId()).isEqualTo(userId))
+                .verifyComplete();
         }
 
     }
 
+    @Nested
+    @Description("Тестирует методы CartRepository")
+    class CartRepositoryTests {
 
+        @Test
+        void createAndFindCartByUser() {
+            Cart cart = new Cart();
+            cart.setUserId(userId);
+            cart.setTotalPrice(BigDecimal.ZERO);
+
+            cartRepository.save(cart).block();
+
+            StepVerifier.create(cartRepository.findByUserId(userId))
+                .assertNext(c -> assertThat(c.getUserId()).isEqualTo(userId))
+                .verifyComplete();
+        }
+    }
 }

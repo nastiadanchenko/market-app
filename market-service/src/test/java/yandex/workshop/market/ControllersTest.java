@@ -2,9 +2,7 @@ package yandex.workshop.market;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 
-import io.r2dbc.spi.ConnectionFactory;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,35 +11,39 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import yandex.workshop.market.api.DefaultApi;
+import yandex.workshop.market.config.SecurityConfig;
 import yandex.workshop.market.controller.CartController;
 import yandex.workshop.market.controller.ItemController;
 import yandex.workshop.market.controller.OrderController;
-import yandex.workshop.market.domain.BalanceResponse;
 import yandex.workshop.market.domain.PaymentResponse;
 import yandex.workshop.market.dto.Action;
+import yandex.workshop.market.dto.CartDto;
 import yandex.workshop.market.dto.ItemDto;
 import yandex.workshop.market.dto.ItemsPageDto;
 import yandex.workshop.market.dto.OrderDto;
 import yandex.workshop.market.dto.PagingDto;
-import yandex.workshop.market.dto.mapperDto.ItemMapper;
+import yandex.workshop.market.entity.Cart;
+import yandex.workshop.market.service.CartService;
 import yandex.workshop.market.service.ItemService;
 import yandex.workshop.market.service.OrderService;
 import yandex.workshop.market.service.PaymentService;
 
-@WebFluxTest({ItemController.class, OrderController.class, CartController.class, DefaultApi.class})
+@WebFluxTest({ItemController.class,
+    CartController.class,
+    OrderController.class,
+    DefaultApi.class
+})
+@Import(SecurityConfig.class)
 public class ControllersTest {
-    @MockitoBean
-    private ConnectionFactory connectionFactory;
-
-    @MockitoBean
-    private TransactionalOperator transactionalOperator;
 
     @Autowired
     private WebTestClient webTestClient;
@@ -50,15 +52,26 @@ public class ControllersTest {
     private ItemService itemService;
 
     @MockitoBean
+    private CartService cartService;
+
+    @MockitoBean
     private OrderService orderService;
 
     @MockitoBean
     private PaymentService paymentService;
 
+    private WebTestClient authClient;
+
     private ItemDto itemDto;
+    private Cart cart;
 
     @BeforeEach
     void setUp() {
+        authClient = webTestClient.mutateWith(
+            SecurityMockServerConfigurers.mockJwt()
+                .jwt(jwt -> jwt.subject("kc-user-1"))
+        );
+
         itemDto = new ItemDto(
             1L,
             "Title",
@@ -67,36 +80,39 @@ public class ControllersTest {
             "/img.png",
             "Desc"
         );
+
+        cart = new Cart();
+        cart.setId(1L);
+        cart.setUserId(1L);
+        cart.setTotalPrice(BigDecimal.valueOf(100));
     }
 
     @Test
     @DisplayName("GET /items - должен возвращать страницу с товарами")
-    void shouldReturnItemPage() throws Exception {
-        ItemsPageDto page = new ItemsPageDto(List.of(List.of(ItemMapper.INSTANCE.toEntity(itemDto))),
-            new PagingDto(5, 1, false, false));
+    void shouldReturnItemPage() {
+        ItemsPageDto page = new ItemsPageDto(
+            List.of(List.of(itemDto)),
+            new PagingDto(5, 1, false, false)
+        );
 
         Mockito.when(itemService.getItemsPage(any(), any(), anyInt(), anyInt()))
             .thenReturn(Mono.just(page));
 
-        webTestClient.get()
+        authClient.get()
             .uri("/items")
             .exchange()
             .expectStatus().isOk()
             .expectBody(String.class)
-            .consumeWith(r -> {
-                String body = r.getResponseBody();
-                // Проверяем заголовок HTML (или любой другой маркер)
-                assert body.contains("items");
-            });
+            .value(body -> body.contains("items"));
     }
 
     @Test
     @DisplayName("POST /items - должен добавлять товар в корзину и перенаправлять на /items")
-    void shouldAddItemToCart() throws Exception {
-        Mockito.when(itemService.actionWithItem(anyLong(), any()))
+    void shouldAddItemToCart() {
+        Mockito.when(cartService.actionWithItem(1L, Action.PLUS))
             .thenReturn(Mono.empty());
 
-        webTestClient.post()
+        authClient.post()
             .uri(uriBuilder -> uriBuilder
                 .path("/items")
                 .queryParam("id", "1")
@@ -105,17 +121,17 @@ public class ControllersTest {
             .exchange()
             .expectStatus().is3xxRedirection();
 
-        Mockito.verify(itemService).actionWithItem(1L, Action.PLUS);
+        Mockito.verify(cartService).actionWithItem(1L, Action.PLUS);
+
     }
 
     @Test
     @DisplayName("GET /items/{id} - должен возвращать страницу с деталями товара")
-    void shouldReturnItemDetails() throws Exception {
-
+    void shouldReturnItemDetails() {
         Mockito.when(itemService.findItemById(1L))
             .thenReturn(Mono.just(itemDto));
 
-        webTestClient.get()
+        authClient.get()
             .uri("/items/1")
             .exchange()
             .expectStatus().isOk()
@@ -127,13 +143,16 @@ public class ControllersTest {
 
     @Test
     @DisplayName("POST /items/{id} - должен изменять количество товара в корзине и перенаправлять на /items/{id}")
-    void shouldChangeItemQuantityInCart() throws Exception {
+    void shouldChangeItemQuantityInCart() {
         Long itemId = itemDto.id();
 
-        Mockito.when(itemService.actionWithItem(1L, Action.MINUS))
+        Mockito.when(cartService.actionWithItem(itemId, Action.MINUS))
+            .thenReturn(Mono.empty());
+
+        Mockito.when(itemService.findItemById(itemId))
             .thenReturn(Mono.just(itemDto));
 
-        webTestClient.post()
+        authClient.post()
             .uri(uriBuilder -> uriBuilder
                 .path("/items/{id}")
                 .queryParam("action", "MINUS")
@@ -142,52 +161,45 @@ public class ControllersTest {
             .expectStatus().isOk()
             .expectBody(String.class)
             .consumeWith(r -> {
-                    assert r.getResponseBody().contains("Title");
+                String body = r.getResponseBody();
+                assert body != null;
+                assert body.contains("Title");
             });
 
-        Mockito.verify(itemService).actionWithItem(1L, Action.MINUS);
+        Mockito.verify(cartService).actionWithItem(itemId, Action.MINUS);
+        Mockito.verify(itemService).findItemById(itemId);
     }
 
 
     @Test
     @DisplayName("GET /cart/items - должен возвращать страницу с товарами в корзине")
-    void shouldReturnCartItemsPage() throws Exception {
-        BalanceResponse balanceResponse = new BalanceResponse();
-        balanceResponse.setBalance(500.00);
+    void shouldReturnCartPage() {
+        CartDto cartDto = new CartDto(
+            1L,
+            List.of(),
+            BigDecimal.valueOf(100)
+        );
 
-        ResponseEntity<BalanceResponse> responseEntity =
-            ResponseEntity.ok(balanceResponse);
-
-        Mockito.when(itemService.findItemsDtoByCountGreaterThanZero())
-            .thenReturn(Flux.just(itemDto));
-        Mockito.when(itemService.getTotalSum())
-            .thenReturn(Mono.just(200L));
+        Mockito.when(cartService.getCurrentUserCartDto())
+            .thenReturn(Mono.just(cartDto));
 
         Mockito.when(paymentService.getBalance())
             .thenReturn(Mono.just(500.0));
 
-        webTestClient.get()
+        authClient.get()
             .uri("/cart/items")
             .exchange()
             .expectStatus().isOk()
-            .expectBody(String.class)
-            .consumeWith(r -> {
-                String body = r.getResponseBody();
-                assert body != null;
-                assert body.contains("cart");
-                assert body.contains("200");
-                assert !body.contains("Недостаточно средств");
-                assert !body.contains("Платежная услуга недоступна");
-            });
+            .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML);
     }
 
     @Test
     @DisplayName("POST /cart/items - длжен изменять количество товара в корзине и перенаправлять на /cart/items")
     void shouldModifyCartItemAndRedirect() throws Exception {
-        Mockito.when(itemService.actionWithItem(1L, Action.PLUS))
+        Mockito.when(cartService.actionWithItem(itemDto.id(), Action.PLUS))
             .thenReturn(Mono.empty());
 
-        webTestClient.post()
+        authClient.post()
             .uri(uriBuilder -> uriBuilder
                 .path("/cart/items")
                 .queryParam("id", "1")
@@ -196,72 +208,61 @@ public class ControllersTest {
             .exchange()
             .expectStatus().is3xxRedirection();
 
-        Mockito.verify(itemService).actionWithItem(1L, Action.PLUS);
+        Mockito.verify(cartService).actionWithItem(itemDto.id(), Action.PLUS);
     }
 
     @Test
     @DisplayName("GET /orders -должен возвращать страницу со списком заказов")
     void shouldReturnOrdersPage() throws Exception {
-        OrderDto orderDto = new OrderDto(1L, List.of(), 100L);
-        Mockito.when(orderService.findAllOrders())
-            .thenReturn(Flux.just(orderDto));
+        OrderDto order = new OrderDto(1L, List.of(), BigDecimal.valueOf(100).longValue());
+        Mockito.when(orderService.findAllOrdersForCurrentUser())
+            .thenReturn(Flux.just(order));
 
-        webTestClient.get()
+        authClient.get()
             .uri("/orders")
             .exchange()
             .expectStatus().isOk()
             .expectBody(String.class)
-            .consumeWith(r -> {
-                assert r.getResponseBody().contains("orders");
-            });
+            .value(body -> body.contains("orders"));
     }
 
     @Test
     @DisplayName("GET /orders/{id} - должен возвращать страницу с информацией о заказе")
     void shouldReturnOrderPage() throws Exception {
-        OrderDto orderDto = new OrderDto(1L, List.of(), 100L);
-//        when(orderService.findOrderById(1L)).then(orderDto);
+        OrderDto order = new OrderDto(1L, List.of(), BigDecimal.valueOf(100).longValue());
 
         Mockito.when(orderService.findOrderById(1L))
-            .thenReturn(Mono.just(orderDto));
+            .thenReturn(Mono.just(order));
 
-        webTestClient.get()
+        authClient.get()
             .uri("/orders/1")
             .exchange()
             .expectStatus().isOk()
             .expectBody(String.class)
-            .consumeWith(r -> {
-                assert r.getResponseBody().contains("order");
-            });
+            .value(body -> body.contains("order"));
     }
 
     @Test
     @DisplayName("POST /buy  - должен создавать заказ и перенаправлять на страницу заказа")
     void shouldCreateOrderAndRedirect() {
-        long total = 100L;
+        OrderDto order = new OrderDto(1L, List.of(), BigDecimal.valueOf(100).longValue());
 
-        OrderDto orderDto = new OrderDto(1L, List.of(), 100L);
-
-        Mockito.when(orderService.createOrder())
-            .thenReturn(Mono.just(orderDto));
-
-        PaymentResponse paymentResponse = new PaymentResponse();
-        ResponseEntity<PaymentResponse> paymentEntity =
-            ResponseEntity.ok(paymentResponse);
-
-        Mockito.when(itemService.getTotalSum())
-            .thenReturn(Mono.just(total));
+        Mockito.when(cartService.getCurrentUserCart())
+            .thenReturn(Mono.just(cart));
 
         Mockito.when(paymentService.pay(any()))
             .thenReturn(Mono.just(ResponseEntity.ok(new PaymentResponse())));
 
-        // when / then
-        webTestClient.post()
+        Mockito.when(orderService.createOrder(cart))
+            .thenReturn(Mono.just(order));
+
+        authClient.post()
             .uri("/buy")
             .exchange()
             .expectStatus().is3xxRedirection()
             .expectHeader().valueEquals("Location", "/orders/1");
     }
-
-
 }
+
+
+

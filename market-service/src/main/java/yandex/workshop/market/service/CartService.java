@@ -68,7 +68,7 @@ public class CartService {
     /**
      * Добавить товар в корзину текущего пользователя
      */
-    @CacheEvict(value = "userCart", key = "#userId")
+    @CacheEvict(value = "userCart", allEntries = true)
     public Mono<CartItem> addItem(Long itemId) {
         return
             userService.currentUser()
@@ -123,7 +123,7 @@ public class CartService {
      */
     @CacheEvict(
         value = { "cartItems", "cartTotal", "userCart" },
-        key = "#root.authentication.name"
+        allEntries = true
     )
     public Mono<Void> decreaseItem(Long itemId) {
         return getCurrentUserCart()
