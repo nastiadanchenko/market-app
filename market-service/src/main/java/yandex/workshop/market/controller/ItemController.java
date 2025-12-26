@@ -11,6 +11,7 @@ import org.springframework.web.reactive.result.view.Rendering;
 import reactor.core.publisher.Mono;
 import yandex.workshop.market.dto.Action;
 import yandex.workshop.market.dto.Sorter;
+import yandex.workshop.market.service.CartService;
 import yandex.workshop.market.service.ItemService;
 
 @Controller
@@ -18,6 +19,7 @@ import yandex.workshop.market.service.ItemService;
 public class ItemController {
 
     private final ItemService itemService;
+    private final CartService cartService;
 
 
     /**
@@ -36,8 +38,7 @@ public class ItemController {
                                         @RequestParam(required = false, defaultValue = "1") Integer pageNumber,
                                         @RequestParam(required = false, defaultValue = "5") Integer pageSize) {
 
-        return itemService.getItemsPage(search, sort, pageNumber, pageSize)
-            .map(itemsPageDto ->
+        return itemService.getItemsPage(search, sort, pageNumber, pageSize).map(itemsPageDto ->
                 Rendering.view("items")
                     .modelAttribute("items", itemsPageDto.itemsRows())
                     .modelAttribute("search", search)
@@ -60,20 +61,22 @@ public class ItemController {
      * @return страница со списком товаров
      */
     @PostMapping({"/items"})
-    public Mono<Rendering> addToCart(@RequestParam("id") Long itemId,
-                                     @RequestParam(required = false, defaultValue = "") String search,
-                                     @RequestParam(required = false, defaultValue = "NO") String sort,
-                                     @RequestParam(required = false, defaultValue = "1") Integer pageNumber,
-                                     @RequestParam(required = false, defaultValue = "5") Integer pageSize,
-                                     @RequestParam Action action) {
+    public Mono<Rendering> modifyCartFromItemList(@RequestParam("id") Long itemId,
+                                                  @RequestParam(required = false, defaultValue = "") String search,
+                                                  @RequestParam(required = false, defaultValue = "NO") String sort,
+                                                  @RequestParam(required = false, defaultValue = "1") Integer pageNumber,
+                                                  @RequestParam(required = false, defaultValue = "5") Integer pageSize,
+                                                  @RequestParam Action action) {
 
-        return itemService.actionWithItem(itemId, action)
-            .then(Mono.fromCallable(() -> Rendering.redirectTo("/items")
-                .modelAttribute("search", search)
-                .modelAttribute("sort", sort)
-                .modelAttribute("pageNumber", pageNumber)
-                .modelAttribute("pageSize", pageSize)
-                .build()));
+        return cartService.actionWithItem(itemId, action)
+            .thenReturn(
+                Rendering.redirectTo("/items")
+                    .modelAttribute("search", search)
+                    .modelAttribute("sort", sort)
+                    .modelAttribute("pageNumber", pageNumber)
+                    .modelAttribute("pageSize", pageSize)
+                    .build()
+            );
     }
 
     /**
@@ -101,9 +104,10 @@ public class ItemController {
      * @return страница товара
      */
     @PostMapping({"/items/{id}"})
-    public Mono<Rendering> addToCart(@PathVariable("id") Long itemId,
-                                     @RequestParam Action action) {
-        return itemService.actionWithItem(itemId, action)
+    public Mono<Rendering> modifyCartFromItemPage(@PathVariable("id") Long itemId,
+                                                  @RequestParam Action action) {
+        return cartService.actionWithItem(itemId, action)
+            .then(itemService.findItemById(itemId))
             .map(item ->
                 Rendering.view("item")
                     .modelAttribute("item", item)

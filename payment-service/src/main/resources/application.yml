@@ -2,6 +2,13 @@ spring:
   application:
     name: payment-api
 
+  security:
+    oauth2:
+      resource-server:
+        jwt:
+          issuer-uri: http://localhost:8085/realms/market
+
+
 server:
   port: 8081
 

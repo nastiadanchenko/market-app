@@ -11,7 +11,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import org.springframework.web.reactive.result.view.Rendering;
 import reactor.core.publisher.Mono;
 import yandex.workshop.market.domain.PaymentRequest;
-import yandex.workshop.market.service.ItemService;
+import yandex.workshop.market.service.CartService;
 import yandex.workshop.market.service.OrderService;
 import yandex.workshop.market.service.PaymentService;
 
@@ -19,20 +19,16 @@ import yandex.workshop.market.service.PaymentService;
 @RequiredArgsConstructor
 public class OrderController {
 
-    private final ItemService itemService;
-
-    private final PaymentService paymentService;
-
     private final OrderService orderService;
+    private final CartService cartService;
+    private final PaymentService paymentService;
 
     /**
      * Получение страницы со списком заказов
-     *
-     * @return страница со списком заказов
      */
     @GetMapping("/orders")
-    private Mono<Rendering> getOrdersPage() {
-        return orderService.findAllOrders()
+    public Mono<Rendering> getOrdersPage() {
+        return orderService.findAllOrdersForCurrentUser()
             .collectList()
             .map(orders ->
                 Rendering.view("orders")
@@ -43,10 +39,6 @@ public class OrderController {
 
     /**
      * Получение страницы с информацией о заказе
-     *
-     * @param orderId  id заказа
-     * @param newOrder флаг, указывающий, что заказ только что создан
-     * @return страница заказа
      */
     @GetMapping("/orders/{id}")
     public Mono<Rendering> getOrderPage(@PathVariable("id") Long orderId,
@@ -61,31 +53,32 @@ public class OrderController {
             );
     }
 
-
     /**
-     * Создание заказа из товаров в корзине.
-     * Перед созданием пытаемся провести платёж через external payments service.
-     * При успешном платеже — создаём заказ и редиректим на страницу заказа.
-     * При 402 (insufficient funds) или 503 (service unavailable) — редиректим назад в корзину с сообщением.
-     *
-     * @return перенаправление на страницу созданного заказа
+     * Оформление заказа из корзины текущего пользователя
      */
     @PostMapping("/buy")
     public Mono<Rendering> booking() {
-        return itemService.getTotalSum()
-            .flatMap(total -> {
+        return cartService.getCurrentUserCart()
+            .flatMap(cart -> {
+                if (cart.getTotalPrice() == null || cart.getTotalPrice().signum() <= 0) {
+                    return Mono.just(
+                        Rendering.redirectTo("/cart/items")
+                            .modelAttribute("paymentMessage", "Корзина пуста")
+                            .build()
+                    );
+                }
                 PaymentRequest paymentRequest = new PaymentRequest();
-                paymentRequest.setAmount(total.doubleValue());
+                paymentRequest.setAmount(cart.getTotalPrice().doubleValue());
 
                 return paymentService.pay(paymentRequest)
                     .flatMap(resp -> {
                         HttpStatusCode status = resp.getStatusCode();
 
                         if (status.is2xxSuccessful()) {
-                            return orderService.createOrder()
-                                .map(o ->
+                            return orderService.createOrder(cart)
+                                .map(order ->
                                     Rendering.redirectTo("/orders/{id}")
-                                        .modelAttribute("id", o.id())
+                                        .modelAttribute("id", order.id())
                                         .modelAttribute("newOrder", true)
                                         .build()
                                 );

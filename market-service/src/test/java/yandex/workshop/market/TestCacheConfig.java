@@ -16,7 +16,11 @@ public class TestCacheConfig {
             "items",
             "itemList",
             "itemsInCartTotal",
-            "itemsInCart"
+            "itemsInCart",
+            "userCart",
+            "cartItems",
+            "cartTotal"
+
         );
     }
 }

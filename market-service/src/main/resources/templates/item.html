@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.w3.org/1999/xhtml">
 
 <head>
     <meta charset="utf-8">
@@ -16,9 +16,20 @@
                     <h2>
                         <span class="badge text-bg-success">Витрина магазина</span>
                     </h2>
-                    <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
-                    <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+                    <div>
+                        <!-- Кнопки только для авторизованных -->
+                        <div sec:authorize="isAuthenticated()" class="d-inline-block">
+                            <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
+                            <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
+                        </div>
+                        <div class="d-inline-block">
+                            <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+                            <a href="/login" class="btn btn-secondary bi bi-box-arrow-in-right"> Войти</a>
+                        </div>
+                    </div>
+<!--                    <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>-->
+<!--                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>-->
+<!--                    <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>-->
                 </div>
             </div>
         </div>

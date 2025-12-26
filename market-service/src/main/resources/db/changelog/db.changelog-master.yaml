@@ -82,7 +82,8 @@ databaseChangeLog:
                     nullable: false
               - column:
                   name: total_sum
-                  type: bigint
+                  type: numeric
+                  defaultValueNumeric: 0.00
       rollback:
         - dropTable:
             tableName: orders
@@ -161,3 +162,63 @@ databaseChangeLog:
       changes:
         - sqlFile:
             path: classpath:db/changelog/data/initial_data.sql
+
+  - changeSet:
+      id: 9-roles
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/table/roles.sql
+      rollback:
+        - dropTable:
+            tableName: roles
+
+  - changeSet:
+      id: 10-users
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/table/users.sql
+      rollback:
+        - dropTable:
+            tableName: users
+
+  - changeSet:
+      id: 11-users_roles
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/table/users_roles.sql
+      rollback:
+        - dropTable:
+            tableName: users_roles
+
+  - changeSet:
+      id: 12-update_tables
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/table/update_tables.sql
+      rollback:
+        - dropTable:
+            tableName: users
+
+  - changeSet:
+      id: 13-carts
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/table/carts.sql
+      rollback:
+        - dropTable:
+            tableName: carts
+
+  - changeSet:
+      id: 14-carts_items
+      author: you
+      changes:
+        - sqlFile:
+            path: classpath:db/changelog/table/carts_items.sql
+      rollback:
+        - dropTable:
+            tableName: carts_items

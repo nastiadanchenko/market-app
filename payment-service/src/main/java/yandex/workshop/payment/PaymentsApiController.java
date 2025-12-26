@@ -21,15 +21,12 @@ import yandex.workshop.payment.model.PaymentResponse;
 @RestController
 public class PaymentsApiController implements DefaultApi {
 
-    @Value("${balance.value}")
-    private Double balance;
-
     // Баланс хранится в памяти, сбрасывается при рестарте.
-    private final AtomicReference<Double> balanceInCents = new AtomicReference<>(balance);
+    private final AtomicReference<Double> balanceInCents = new AtomicReference<>(1000.00);
 
     @Override
     public Mono<ResponseEntity<BalanceResponse>> paymentsBalanceGet(ServerWebExchange exchange) {
-        BalanceResponse r = new BalanceResponse().balance(balance);
+        BalanceResponse r = new BalanceResponse().balance(balanceInCents.get());
         return Mono.just(ResponseEntity.ok(r));
     }
 

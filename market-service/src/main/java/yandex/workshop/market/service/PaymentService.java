@@ -3,31 +3,29 @@ package yandex.workshop.market.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import yandex.workshop.market.api.DefaultApi;
 import yandex.workshop.market.domain.*;
 
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
-    private final DefaultApi paymentApi;
+
+    private final WebClient paymentWebClient;
 
     public Mono<Double> getBalance() {
-        return paymentApi.paymentsBalanceGetWithHttpInfo()
-            .flatMap(response -> {
-                if (response.getBody() == null) {
-                    return Mono.error(new IllegalStateException("Payment service returned empty balance response"));
-                }
-                return Mono.just(response.getBody());
-            })
+        return paymentWebClient.get()
+            .uri("http://localhost:8081/payments/balance")
+            .retrieve()
+            .bodyToMono(BalanceResponse.class)
             .map(BalanceResponse::getBalance);
     }
 
     public Mono<ResponseEntity<PaymentResponse>> pay(PaymentRequest req) {
-        if (req == null) {
-            return Mono.error(new IllegalArgumentException("PaymentRequest must not be null"));
-        }
-
-        return paymentApi.paymentsPayPostWithHttpInfo(req);
+        return paymentWebClient.post()
+            .uri("http://localhost:8081/payments/pay")
+            .bodyValue(req)
+            .retrieve()
+            .toEntity(PaymentResponse.class);
     }
 }
