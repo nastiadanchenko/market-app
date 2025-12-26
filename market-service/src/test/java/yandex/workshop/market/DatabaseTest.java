@@ -74,10 +74,11 @@ public class DatabaseTest {
             create table if not exists users (
                 id bigserial primary key,
                 name varchar(255),
-                password varchar(255),
                 enabled boolean,
                 created_at timestamp,
-                updated_at timestamp
+                updated_at timestamp,
+                mail varchar(255),
+                keycloak_id uuid unique
             );
 
             create table if not exists roles (

@@ -1,6 +1,7 @@
 package yandex.workshop.market.entity;
 
 import java.time.Instant;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -27,4 +28,14 @@ public class Users {
     private Instant created;
     @Column("updated_at")
     private Instant updated;
+    @Column("keycloak_id")
+    private UUID keycloakId;
+
+    private String email;
+
+    public Users(Long id, String name,
+                 String email,
+                 boolean enabled,
+                 UUID keycloakId) {
+    }
 }

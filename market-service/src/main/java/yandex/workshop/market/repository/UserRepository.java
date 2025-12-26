@@ -1,5 +1,6 @@
 package yandex.workshop.market.repository;
 
+import java.util.UUID;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
@@ -12,5 +13,5 @@ public interface UserRepository extends ReactiveCrudRepository<Users, Long> {
     Mono<Users> findByName(String name);
 
     @Query("select * from users where keycloak_id = :s")
-    Mono<Users> findByKeycloakId(String s);
+    Mono<Users> findByKeycloakId(UUID s);
 }
